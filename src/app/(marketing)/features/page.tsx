@@ -60,7 +60,7 @@ export default function FeaturesPage() {
                 key={feature.title}
                 className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-7"
               >
-                <div className="mb-6 flex h-13 w-13 items-center justify-center rounded-2xl bg-violet-500/15 text-violet-300">
+                <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-500/15 text-violet-300">
                   <Icon className="h-6 w-6" />
                 </div>
                 <h2 className="text-xl font-black text-white">{feature.title}</h2>

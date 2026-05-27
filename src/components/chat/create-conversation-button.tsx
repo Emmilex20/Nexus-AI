@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { MessageSquarePlus } from "lucide-react";
 
 type CreateConversationButtonProps = {
@@ -9,6 +10,7 @@ type CreateConversationButtonProps = {
   mode?: "CHAT" | "SEARCH" | "CODE" | "FILE";
   label?: string;
   className?: string;
+  children?: ReactNode;
 };
 
 export function CreateConversationButton({
@@ -16,6 +18,7 @@ export function CreateConversationButton({
   mode = "CHAT",
   label = "New chat",
   className,
+  children,
 }: CreateConversationButtonProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -62,8 +65,18 @@ export function CreateConversationButton({
         "inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
       }
     >
-      <MessageSquarePlus className="h-5 w-5" />
-      {loading ? "Creating..." : label}
+      {children ? (
+        loading ? (
+          "Creating..."
+        ) : (
+          children
+        )
+      ) : (
+        <>
+          <MessageSquarePlus className="h-5 w-5" />
+          {loading ? "Creating..." : label}
+        </>
+      )}
     </button>
   );
 }

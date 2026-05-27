@@ -8,7 +8,7 @@ export function PageHeader({ eyebrow, title, description }: PageHeaderProps) {
   return (
     <div className="mb-8 sm:mb-10">
       {eyebrow ? (
-        <p className="text-xs font-bold uppercase tracking-[0.3em] text-violet-300 sm:text-sm">
+        <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-300 sm:text-sm">
           {eyebrow}
         </p>
       ) : null}

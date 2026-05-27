@@ -1,6 +1,8 @@
 "use client";
 
+import { Cpu, Zap } from "lucide-react";
 import { aiModels, type AiModelId } from "@/config/ai-models";
+import { cn } from "@/lib/utils";
 
 type ModelSelectorProps = {
   value: AiModelId;
@@ -8,15 +10,21 @@ type ModelSelectorProps = {
   disabled?: boolean;
 };
 
+const modelIcons = {
+  "gpt-4o-mini": Zap,
+  "gpt-4.1-mini": Cpu,
+} as const;
+
 export function ModelSelector({
   value,
   onChange,
   disabled,
 }: ModelSelectorProps) {
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
+    <div className="flex flex-wrap gap-2">
       {aiModels.map((model) => {
         const active = value === model.id;
+        const Icon = modelIcons[model.id];
 
         return (
           <button
@@ -24,22 +32,24 @@ export function ModelSelector({
             type="button"
             disabled={disabled}
             onClick={() => onChange(model.id)}
-            className={
+            className={cn(
+              "inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-60",
               active
-                ? "rounded-2xl border border-violet-400/50 bg-violet-500/15 p-4 text-left"
-                : "rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-left transition hover:bg-white/[0.07]"
-            }
+                ? "border-cyan-300/40 bg-cyan-400/15 text-cyan-100"
+                : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] hover:text-white"
+            )}
+            title={model.description}
           >
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-black text-white">{model.name}</p>
-              <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-slate-300">
-                {model.creditsPerMessage} credit
-              </span>
-            </div>
-
-            <p className="mt-2 text-xs leading-5 text-slate-400">
-              {model.description}
-            </p>
+            <Icon className="h-4 w-4" />
+            {model.name}
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[10px]",
+                active ? "bg-cyan-200/15" : "bg-white/10"
+              )}
+            >
+              {model.creditsPerMessage} credit
+            </span>
           </button>
         );
       })}

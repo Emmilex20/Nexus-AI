@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
-import { Menu, Sparkles, X } from "lucide-react";
+import { Menu, MessageSquarePlus, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import { appNavItems } from "@/config/app-nav";
 
@@ -10,10 +10,10 @@ export function MobileAppHeader() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/85 backdrop-blur-xl lg:hidden">
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#070a13]/90 backdrop-blur-xl lg:hidden">
       <div className="flex h-16 items-center justify-between px-4">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-blue-500">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 via-violet-500 to-fuchsia-500">
             <Sparkles className="h-5 w-5 text-white" />
           </div>
           <span className="font-black text-white">Nexus AI</span>
@@ -35,6 +35,15 @@ export function MobileAppHeader() {
       {open ? (
         <nav className="border-t border-white/10 px-4 py-4">
           <div className="grid gap-2">
+            <Link
+              href="/chat"
+              onClick={() => setOpen(false)}
+              className="mb-2 flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-950"
+            >
+              <MessageSquarePlus className="h-5 w-5" />
+              New chat
+            </Link>
+
             {appNavItems.map((item) => {
               const Icon = item.icon;
 

@@ -17,8 +17,7 @@ html {
 body {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(124, 58, 237, 0.35), transparent 32rem),
-    radial-gradient(circle at top right, rgba(37, 99, 235, 0.24), transparent 28rem),
+    linear-gradient(135deg, rgba(8, 13, 28, 0.98), rgba(3, 7, 18, 1) 45%, rgba(2, 6, 23, 1)),
     #030712;
   color: var(--foreground);
   font-family: var(--font-inter), Arial, Helvetica, sans-serif;
@@ -39,6 +38,25 @@ select {
 ::selection {
   background: rgba(139, 92, 246, 0.45);
   color: white;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #050816;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #243044;
+  border-radius: 999px;
+  border: 2px solid #050816;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
 }
 
 .container-safe {

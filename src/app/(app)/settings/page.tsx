@@ -1,0 +1,59 @@
+import { Bell, CreditCard, Shield, User } from "lucide-react";
+import { PageHeader } from "@/components/dashboard/page-header";
+
+const settings = [
+  {
+    title: "Profile",
+    description: "Name, email and account details will appear here after auth.",
+    icon: User,
+  },
+  {
+    title: "Security",
+    description: "Password, sessions and account protection will be added later.",
+    icon: Shield,
+  },
+  {
+    title: "Billing",
+    description: "Manage plan, credits, invoices and usage from the billing page.",
+    icon: CreditCard,
+  },
+  {
+    title: "Notifications",
+    description: "Email and product notification preferences will be added later.",
+    icon: Bell,
+  },
+];
+
+export default function SettingsPage() {
+  return (
+    <div>
+      <PageHeader
+        eyebrow="Settings"
+        title="Manage your workspace."
+        description="This page prepares the settings experience before auth, billing and user preferences are connected."
+      />
+
+      <div className="grid gap-5 md:grid-cols-2">
+        {settings.map((item) => {
+          const Icon = item.icon;
+
+          return (
+            <div
+              key={item.title}
+              className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6"
+            >
+              <div className="mb-6 flex h-13 w-13 items-center justify-center rounded-2xl bg-violet-500/15 text-violet-300">
+                <Icon className="h-6 w-6" />
+              </div>
+
+              <h2 className="text-xl font-black text-white">{item.title}</h2>
+              <p className="mt-3 text-sm leading-7 text-slate-400">
+                {item.description}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

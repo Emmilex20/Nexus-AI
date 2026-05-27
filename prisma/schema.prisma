@@ -1,0 +1,211 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum Plan {
+  FREE
+  PRO
+  BUILDER
+  TEAM
+}
+
+enum ConversationMode {
+  CHAT
+  SEARCH
+  CODE
+  FILE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  ABANDONED
+}
+
+enum PaymentType {
+  PLAN
+  CREDITS
+}
+
+enum BillingEventType {
+  PLAN_PURCHASED
+  CREDITS_PURCHASED
+  MONTHLY_CREDITS_GRANTED
+  PAYMENT_FAILED
+  PAYMENT_ABANDONED
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum AdminAuditAction {
+  CREDIT_ADJUSTED
+  PLAN_CHANGED
+  USER_SUSPENDED
+  USER_UNSUSPENDED
+}
+
+model User {
+  id             String   @id @default(cuid())
+  clerkId        String   @unique
+  email          String   @unique
+  firstName      String?
+  lastName       String?
+  imageUrl       String?
+  plan           Plan     @default(FREE)
+  role           UserRole @default(USER)
+  credits        Int      @default(100)
+  isSuspended    Boolean  @default(false)
+  suspensionReason String?
+  suspendedAt    DateTime?
+  onboardingDone Boolean  @default(false)
+  planStartedAt  DateTime?
+  planRenewsAt   DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  projects      Project[]
+  conversations Conversation[]
+  messages      Message[]
+  usageLogs     UsageLog[]
+  payments      Payment[]
+  billingEvents BillingEvent[]
+
+  @@index([clerkId])
+  @@index([email])
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  color       String?
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+
+  @@index([userId])
+}
+
+model Conversation {
+  id        String           @id @default(cuid())
+  title     String           @default("New conversation")
+  mode      ConversationMode @default(CHAT)
+  userId    String
+  projectId String?
+  pinned    Boolean          @default(false)
+  archived  Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project  Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  messages Message[]
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([mode])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  role           Role
+  content        String
+  model          String?
+  tokensUsed     Int      @default(0)
+  conversationId String
+  userId         String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([userId])
+  @@index([role])
+}
+
+model UsageLog {
+  id          String   @id @default(cuid())
+  userId      String
+  action      String
+  model       String?
+  tokensUsed  Int      @default(0)
+  creditsUsed Int      @default(0)
+  costUsd     Decimal? @db.Decimal(10, 6)
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([action])
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  userId        String
+  reference     String        @unique
+  type          PaymentType
+  status        PaymentStatus @default(PENDING)
+  plan          Plan?
+  packageId     String?
+  amountKobo    Int
+  credits       Int           @default(0)
+  currency      String        @default("NGN")
+  paystackUrl   String?
+  metadata      Json?
+  paidAt        DateTime?
+  failureReason String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([reference])
+  @@index([status])
+}
+
+model BillingEvent {
+  id        String           @id @default(cuid())
+  userId    String
+  type      BillingEventType
+  note      String?
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+}
+
+model AdminAuditLog {
+  id           String           @id @default(cuid())
+  adminUserId  String
+  targetUserId String
+  action       AdminAuditAction
+  note         String?
+  metadata     Json?
+  createdAt    DateTime         @default(now())
+
+  @@index([adminUserId])
+  @@index([targetUserId])
+  @@index([action])
+}

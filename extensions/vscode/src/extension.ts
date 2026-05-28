@@ -1258,11 +1258,11 @@ function getAssistantViewHtml({
   pendingChanges: NexusAgentChange[];
   busy: boolean;
 }) {
+  const renderedMessages = messages.map(renderAssistantMessage).join("");
+  const renderedChanges = renderPendingChanges(pendingChanges);
   const status = connected ? "Connected" : "Not connected";
   const apiMode = isLocalApiUrl(overview.apiUrl) ? "Local API" : "Production API";
   const workspaceStatus = overview.hasWorkspace ? "Workspace ready" : "No folder open";
-  const renderedMessages = messages.map(renderAssistantMessage).join("");
-  const renderedChanges = renderPendingChanges(pendingChanges);
   const permissionLabel = getPermissionLabel(overview.permissionMode);
 
   return `<!doctype html>
@@ -1288,38 +1288,38 @@ function getAssistantViewHtml({
       .scroll {
         flex: 1;
         overflow: auto;
-        padding: 14px;
+        padding: 10px;
       }
 
       .logo {
         align-items: center;
         display: flex;
-        gap: 12px;
-        margin-bottom: 12px;
+        gap: 10px;
+        margin-bottom: 8px;
       }
 
       .mark {
         align-items: center;
         background: linear-gradient(135deg, #0ea5e9, #22c55e);
-        border-radius: 10px;
+        border-radius: 8px;
         color: white;
         display: flex;
-        font-size: 20px;
+        font-size: 16px;
         font-weight: 900;
-        height: 42px;
+        height: 34px;
         justify-content: center;
-        width: 42px;
+        width: 34px;
       }
 
       h1 {
-        font-size: 18px;
+        font-size: 16px;
         margin: 0;
       }
 
       p {
         color: var(--vscode-descriptionForeground);
-        line-height: 1.55;
-        margin: 8px 0 0;
+        line-height: 1.45;
+        margin: 4px 0 0;
       }
 
       .status {
@@ -1327,6 +1327,10 @@ function getAssistantViewHtml({
         border-radius: 8px;
         margin: 10px 0;
         padding: 12px;
+      }
+
+      .overview-status {
+        display: none;
       }
 
       .pill {
@@ -1621,11 +1625,11 @@ function getAssistantViewHtml({
           <div class="mark">N</div>
           <div>
             <h1>Nexus AI</h1>
-            <p>Tell it what to change. Review, then apply.</p>
+            <p>Tell it what to change.</p>
           </div>
         </div>
 
-        <div class="status">
+        <div class="status overview-status">
           <span class="pill ${connected ? "connected" : "disconnected"}">${status}</span>
           <span class="pill neutral">${escapeHtml(workspaceStatus)}</span>
           <p>${escapeHtml(apiMode)}: <code>${escapeHtml(overview.apiUrl)}</code></p>

@@ -1,14 +1,25 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import {
   ArrowUp,
   Bot,
+  Brain,
+  Check,
+  ChevronDown,
+  FileText,
+  Globe,
+  Image as ImageIcon,
   Loader2,
+  MoreHorizontal,
+  Paperclip,
+  Plus,
+  Search,
   Sparkles,
   User,
   Wallet,
+  X,
 } from "lucide-react";
 import { MessageContent } from "@/components/chat/message-content";
 import { CopyButton } from "@/components/chat/copy-button";
@@ -20,6 +31,7 @@ import { useChatPreferences } from "@/components/chat/chat-preferences";
 import { ModeBadge } from "@/components/chat/mode-badge";
 import { aiModels, type AiModelId } from "@/config/ai-models";
 import type { ChatMode } from "@/config/ai-models";
+import { cn } from "@/lib/utils";
 
 type DbMessage = {
   id: string;
@@ -40,13 +52,52 @@ type UiMessage = {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
+  attachments?: ComposerAttachment[];
 };
+
+type ComposerAttachment = {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  kind: "image" | "text" | "file";
+  dataUrl?: string;
+  text?: string;
+};
+
+type ComposerMode = "DEFAULT" | "THINKING" | "DEEP_RESEARCH" | "WEB_SEARCH";
+
+type SiteSearchMode = "WEB" | "SPECIFIC";
 
 const quickPrompts = [
   "Summarize the next steps",
   "Turn this into a checklist",
   "Give me the technical plan",
 ];
+
+const readableTextExtensions = new Set([
+  "txt",
+  "md",
+  "csv",
+  "json",
+  "js",
+  "jsx",
+  "ts",
+  "tsx",
+  "css",
+  "html",
+  "xml",
+  "yaml",
+  "yml",
+  "log",
+]);
+
+const composerModeLabels: Record<ComposerMode, string> = {
+  DEFAULT: "Standard",
+  THINKING: "Thinking",
+  DEEP_RESEARCH: "Deep research",
+  WEB_SEARCH: "Web search",
+};
 
 function mapRole(role: DbMessage["role"]): UiMessage["role"] {
   if (role === "USER") return "user";
@@ -111,8 +162,21 @@ export function ChatPanel({
   const [credits, setCredits] = useState(initialCredits);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState("");
+  const [attachmentError, setAttachmentError] = useState("");
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [composerMenuOpen, setComposerMenuOpen] = useState(false);
+  const [composerMode, setComposerMode] = useState<ComposerMode>("DEFAULT");
+  const [siteSearchMode, setSiteSearchMode] = useState<SiteSearchMode>("WEB");
+  const [managedSites, setManagedSites] = useState<string[]>([]);
+  const [siteInput, setSiteInput] = useState("");
+  const [siteError, setSiteError] = useState("");
+  const [sitesMenuOpen, setSitesMenuOpen] = useState(false);
+  const [sitesModalOpen, setSitesModalOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const composerMenuRef = useRef<HTMLDivElement | null>(null);
+  const sitesMenuRef = useRef<HTMLDivElement | null>(null);
 
   const hasCredits = credits > 0;
 
@@ -129,6 +193,38 @@ export function ChatPanel({
     textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`;
   }, [input]);
 
+  useEffect(() => {
+    if (!composerMenuOpen) return;
+
+    function handlePointerDown(event: globalThis.PointerEvent) {
+      if (!composerMenuRef.current?.contains(event.target as Node)) {
+        setComposerMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [composerMenuOpen]);
+
+  useEffect(() => {
+    if (!sitesMenuOpen) return;
+
+    function handlePointerDown(event: globalThis.PointerEvent) {
+      if (!sitesMenuRef.current?.contains(event.target as Node)) {
+        setSitesMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [sitesMenuOpen]);
+
   async function refreshCredits() {
     const res = await fetch("/api/me");
     const data = await res.json();
@@ -144,12 +240,20 @@ export function ChatPanel({
     retryRequest,
     retryTargetMessageId,
     previousAssistantContent,
+    requestAttachments = [],
+    requestComposerMode = "DEFAULT",
+    requestSiteSearchMode = "WEB",
+    requestSites = [],
   }: {
     message: string;
     assistantMessageId: string;
     retryRequest?: RetryRequest;
     retryTargetMessageId?: string;
     previousAssistantContent?: string;
+    requestAttachments?: ComposerAttachment[];
+    requestComposerMode?: ComposerMode;
+    requestSiteSearchMode?: SiteSearchMode;
+    requestSites?: string[];
   }) {
     setError("");
     setStreaming(true);
@@ -164,6 +268,10 @@ export function ChatPanel({
           conversationId,
           message,
           model: selectedModel,
+          attachments: requestAttachments,
+          composerMode: requestComposerMode,
+          siteSearchMode: requestSiteSearchMode,
+          sites: requestSites,
           retry: Boolean(retryRequest),
           retryMode: retryRequest?.mode,
           retryInstruction: retryRequest?.instruction,
@@ -242,16 +350,22 @@ export function ChatPanel({
   async function handleSubmit(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
 
-    const cleanInput = input.trim();
+    const cleanInput =
+      input.trim() ||
+      (attachments.length > 0 ? "Please analyze the attached file(s)." : "");
 
     if (!cleanInput || streaming || !hasCredits) return;
 
     setInput("");
+    setAttachmentError("");
+    setAttachments([]);
+    setComposerMode("DEFAULT");
 
     const userMessage: UiMessage = {
       id: crypto.randomUUID(),
       role: "user",
       content: cleanInput,
+      attachments,
     };
 
     const assistantMessage: UiMessage = {
@@ -265,6 +379,10 @@ export function ChatPanel({
     await streamAssistantResponse({
       message: cleanInput,
       assistantMessageId: assistantMessage.id,
+      requestAttachments: attachments,
+      requestComposerMode: composerMode,
+      requestSiteSearchMode: siteSearchMode,
+      requestSites: siteSearchMode === "SPECIFIC" ? managedSites : [],
     });
   }
 
@@ -273,6 +391,134 @@ export function ChatPanel({
       setInput(prompt);
       textareaRef.current?.focus();
     }
+  }
+
+  function getFileExtension(fileName: string) {
+    return fileName.split(".").pop()?.toLowerCase() ?? "";
+  }
+
+  function isReadableTextFile(file: File) {
+    return (
+      file.type.startsWith("text/") ||
+      readableTextExtensions.has(getFileExtension(file.name))
+    );
+  }
+
+  function readFileAsDataUrl(file: File) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleFiles(files: FileList | null) {
+    if (!files?.length) return;
+
+    setAttachmentError("");
+
+    const availableSlots = Math.max(0, 4 - attachments.length);
+    const selectedFiles = Array.from(files).slice(0, availableSlots);
+    const nextAttachments: ComposerAttachment[] = [];
+
+    for (const file of selectedFiles) {
+      if (file.size > 5_000_000) {
+        setAttachmentError("Files must be 5MB or smaller.");
+        continue;
+      }
+
+      if (file.type.startsWith("image/")) {
+        nextAttachments.push({
+          id: crypto.randomUUID(),
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          kind: "image",
+          dataUrl: await readFileAsDataUrl(file),
+        });
+        continue;
+      }
+
+      if (isReadableTextFile(file)) {
+        const text = await file.text();
+
+        nextAttachments.push({
+          id: crypto.randomUUID(),
+          name: file.name,
+          type: file.type || "text/plain",
+          size: file.size,
+          kind: "text",
+          text: text.slice(0, 16_000),
+        });
+        continue;
+      }
+
+      setAttachmentError(
+        "This upload supports images and readable text files for now."
+      );
+    }
+
+    setAttachments((current) => [...current, ...nextAttachments].slice(0, 4));
+  }
+
+  function removeAttachment(attachmentId: string) {
+    setAttachments((current) =>
+      current.filter((attachment) => attachment.id !== attachmentId)
+    );
+  }
+
+  function setGuidedMode(nextMode: ComposerMode) {
+    setComposerMode((current) => (current === nextMode ? "DEFAULT" : nextMode));
+    setComposerMenuOpen(false);
+    textareaRef.current?.focus();
+  }
+
+  function normalizeSiteUrl(value: string) {
+    const trimmed = value.trim();
+
+    if (!trimmed) return null;
+
+    const withProtocol = /^https?:\/\//i.test(trimmed)
+      ? trimmed
+      : `https://${trimmed}`;
+
+    try {
+      const url = new URL(withProtocol);
+      return url.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  function addManagedSites() {
+    const candidates = siteInput
+      .split(",")
+      .map((item) => normalizeSiteUrl(item))
+      .filter((item): item is string => Boolean(item));
+
+    if (candidates.length === 0) {
+      setSiteError("Enter at least one valid site URL.");
+      return;
+    }
+
+    setManagedSites((current) =>
+      Array.from(new Set([...current, ...candidates])).slice(0, 10)
+    );
+    setSiteSearchMode("SPECIFIC");
+    setSiteInput("");
+    setSiteError("");
+  }
+
+  function removeManagedSite(site: string) {
+    setManagedSites((current) => current.filter((item) => item !== site));
+  }
+
+  function openSitesModal() {
+    setSitesMenuOpen(false);
+    setSitesModalOpen(true);
+    setSiteError("");
   }
 
   function retryFromMessage(messageIndex: number, retryRequest: RetryRequest) {
@@ -405,7 +651,27 @@ export function ChatPanel({
                   {message.role === "assistant" ? (
                     <MessageContent content={message.content || "Thinking..."} />
                   ) : (
-                    <div className="whitespace-pre-wrap">{message.content}</div>
+                    <div>
+                      {message.attachments?.length ? (
+                        <div className="mb-3 flex flex-wrap gap-2">
+                          {message.attachments.map((attachment) => (
+                            <div
+                              key={attachment.id}
+                              className="inline-flex max-w-full items-center gap-2 rounded-xl bg-slate-950/10 px-2.5 py-1.5 text-xs font-bold text-slate-700"
+                            >
+                              {attachment.kind === "image" ? (
+                                <ImageIcon className="h-3.5 w-3.5" />
+                              ) : (
+                                <FileText className="h-3.5 w-3.5" />
+                              )}
+                              <span className="truncate">{attachment.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <div className="whitespace-pre-wrap">{message.content}</div>
+                    </div>
                   )}
                 </div>
 
@@ -442,26 +708,185 @@ export function ChatPanel({
         className="shrink-0 border-t border-white/10 bg-slate-950/95 px-2.5 pb-3 pt-2 backdrop-blur-xl sm:px-5 sm:pb-4"
       >
         <div className="mx-auto max-w-3xl rounded-[1.35rem] bg-[#242424] p-2 shadow-2xl shadow-black/30 ring-1 ring-white/10 sm:rounded-[1.5rem]">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,.txt,.md,.csv,.json,.js,.jsx,.ts,.tsx,.css,.html,.xml,.yaml,.yml,.log"
+            className="hidden"
+            onChange={(event) => {
+              void handleFiles(event.target.files);
+              event.target.value = "";
+            }}
+          />
+
+          {attachments.length > 0 || attachmentError ? (
+            <div className="mb-2 flex flex-wrap gap-2 px-1">
+              {attachments.map((attachment) => (
+                <button
+                  key={attachment.id}
+                  type="button"
+                  onClick={() => removeAttachment(attachment.id)}
+                  className="inline-flex max-w-full items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-200 ring-1 ring-white/10"
+                  title="Remove attachment"
+                >
+                  {attachment.kind === "image" ? (
+                    <ImageIcon className="h-3.5 w-3.5 text-cyan-200" />
+                  ) : (
+                    <FileText className="h-3.5 w-3.5 text-cyan-200" />
+                  )}
+                  <span className="max-w-36 truncate">{attachment.name}</span>
+                  <X className="h-3.5 w-3.5 text-slate-400" />
+                </button>
+              ))}
+
+              {attachmentError ? (
+                <p className="w-full px-1 text-xs font-semibold text-red-200">
+                  {attachmentError}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="relative w-fit shrink-0">
-              <select
-                value={selectedModel}
-                onChange={(event) =>
-                  setSelectedModel(event.target.value as AiModelId)
-                }
-                disabled={streaming}
-                aria-label="Choose assistant model"
-                className="h-8 appearance-none rounded-xl border border-white/10 bg-white/[0.06] pl-3 pr-8 text-[11px] font-black text-white outline-none transition hover:bg-white/[0.09] disabled:cursor-not-allowed disabled:opacity-60 sm:h-11 sm:rounded-2xl sm:pl-3.5 sm:pr-9 sm:text-xs"
-              >
-                {aiModels.map((model) => (
-                  <option key={model.id} value={model.id} className="bg-[#242424]">
-                    {model.name}
-                  </option>
-                ))}
-              </select>
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 sm:text-xs">
-                v
-              </span>
+            <div className="flex items-center gap-2">
+              <div ref={composerMenuRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setComposerMenuOpen((value) => !value)}
+                  disabled={streaming}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50 sm:h-11 sm:w-11"
+                  aria-label="Open attachment and tools menu"
+                >
+                  <Plus className="h-5 w-5" />
+                </button>
+
+                {composerMenuOpen ? (
+                  <div className="absolute bottom-11 left-0 z-50 w-72 rounded-[1.25rem] border border-white/10 bg-[#333333] p-2 shadow-2xl shadow-black/50 sm:bottom-14">
+                    <ComposerMenuButton
+                      icon={<Paperclip className="h-5 w-5" />}
+                      label="Add photos & files"
+                      onClick={() => {
+                        setComposerMenuOpen(false);
+                        fileInputRef.current?.click();
+                      }}
+                    />
+                    <ComposerMenuButton
+                      icon={<FileText className="h-5 w-5" />}
+                      label="Recent files"
+                      detail={attachments.length ? `${attachments.length} attached` : "No recent files"}
+                      disabled
+                    />
+                    <div className="my-1 h-px bg-white/10" />
+                    <ComposerMenuButton
+                      icon={<ImageIcon className="h-5 w-5" />}
+                      label="Create image"
+                      detail="Coming soon"
+                      disabled
+                    />
+                    <ComposerMenuButton
+                      icon={<Brain className="h-5 w-5" />}
+                      label="Thinking"
+                      active={composerMode === "THINKING"}
+                      onClick={() => setGuidedMode("THINKING")}
+                    />
+                    <ComposerMenuButton
+                      icon={<Search className="h-5 w-5" />}
+                      label="Deep research"
+                      active={composerMode === "DEEP_RESEARCH"}
+                      onClick={() => setGuidedMode("DEEP_RESEARCH")}
+                    />
+                    <ComposerMenuButton
+                      icon={<Globe className="h-5 w-5" />}
+                      label="Web search"
+                      active={composerMode === "WEB_SEARCH"}
+                      onClick={() => setGuidedMode("WEB_SEARCH")}
+                    />
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="relative w-fit shrink-0">
+                <select
+                  value={selectedModel}
+                  onChange={(event) =>
+                    setSelectedModel(event.target.value as AiModelId)
+                  }
+                  disabled={streaming}
+                  aria-label="Choose assistant model"
+                  className="h-8 appearance-none rounded-xl border border-white/10 bg-white/[0.06] pl-3 pr-8 text-[11px] font-black text-white outline-none transition hover:bg-white/[0.09] disabled:cursor-not-allowed disabled:opacity-60 sm:h-11 sm:rounded-2xl sm:pl-3.5 sm:pr-9 sm:text-xs"
+                >
+                  {aiModels.map((model) => (
+                    <option key={model.id} value={model.id} className="bg-[#242424]">
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 sm:text-xs">
+                  v
+                </span>
+              </div>
+
+              {composerMode !== "DEFAULT" ? (
+                <button
+                  type="button"
+                  onClick={() => setComposerMode("DEFAULT")}
+                  className="inline-flex h-8 items-center gap-2 rounded-full px-3 text-xs font-black text-cyan-100 transition hover:bg-white/10 sm:h-11 sm:text-sm"
+                >
+                  {composerMode === "DEEP_RESEARCH" ? (
+                    <Search className="h-4 w-4" />
+                  ) : composerMode === "WEB_SEARCH" ? (
+                    <Globe className="h-4 w-4" />
+                  ) : (
+                    <Brain className="h-4 w-4" />
+                  )}
+                  {composerModeLabels[composerMode]}
+                </button>
+              ) : null}
+
+              {composerMode === "DEEP_RESEARCH" || composerMode === "WEB_SEARCH" ? (
+                <div ref={sitesMenuRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setSitesMenuOpen((value) => !value)}
+                    className="inline-flex h-8 items-center gap-2 rounded-full bg-white/10 px-3 text-xs font-black text-slate-100 transition hover:bg-white/15 sm:h-11 sm:text-sm"
+                    aria-label="Choose research sites"
+                  >
+                    <Globe className="h-4 w-4" />
+                    Sites
+                    <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                  </button>
+
+                  {sitesMenuOpen ? (
+                    <div className="absolute bottom-11 left-0 z-50 w-72 rounded-[1.25rem] border border-white/10 bg-[#333333] p-2 shadow-2xl shadow-black/50 sm:bottom-14">
+                      <SitesMenuOption
+                        icon={<Globe className="h-5 w-5" />}
+                        label="Search the web"
+                        active={siteSearchMode === "WEB"}
+                        onClick={() => {
+                          setSiteSearchMode("WEB");
+                          setSitesMenuOpen(false);
+                        }}
+                      />
+                      <SitesMenuOption
+                        icon={<Search className="h-5 w-5" />}
+                        label={`Specific sites (${managedSites.length})`}
+                        active={siteSearchMode === "SPECIFIC"}
+                        onClick={() => {
+                          setSiteSearchMode("SPECIFIC");
+                          setSitesMenuOpen(false);
+                        }}
+                      />
+                      <div className="my-1 h-px bg-white/10" />
+                      <SitesMenuOption
+                        icon={<ArrowUp className="h-5 w-5 rotate-90" />}
+                        label="Manage sites"
+                        onClick={openSitesModal}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
 
             <div className="flex min-w-0 flex-1 items-end gap-2">
@@ -487,7 +912,11 @@ export function ChatPanel({
 
               <button
                 type="submit"
-                disabled={streaming || !input.trim() || !hasCredits}
+                disabled={
+                  streaming ||
+                  (!input.trim() && attachments.length === 0) ||
+                  !hasCredits
+                }
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-slate-500 sm:h-11 sm:w-11"
                 aria-label="Send message"
               >
@@ -497,6 +926,148 @@ export function ChatPanel({
           </div>
         </div>
       </form>
+
+      {sitesModalOpen ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-[1.4rem] border border-white/10 bg-[#262626] p-5 shadow-2xl shadow-black/60 sm:p-6">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-lg font-black text-white sm:text-xl">
+                Search specific sites
+              </h2>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-slate-300 transition hover:bg-white/10 hover:text-white"
+                  aria-label="More site options"
+                >
+                  <MoreHorizontal className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSitesModalOpen(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-slate-300 transition hover:bg-white/10 hover:text-white"
+                  aria-label="Close site manager"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-8 flex gap-3">
+              <input
+                value={siteInput}
+                onChange={(event) => setSiteInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    addManagedSites();
+                  }
+                }}
+                placeholder="Add site URLs, separated by commas"
+                className="min-w-0 flex-1 rounded-full bg-black px-5 py-3 text-sm text-white outline-none placeholder:text-slate-500"
+                autoFocus
+              />
+
+              <button
+                type="button"
+                onClick={addManagedSites}
+                disabled={!siteInput.trim()}
+                className="rounded-full bg-white/20 px-5 py-3 text-sm font-black text-white transition hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Add
+              </button>
+            </div>
+
+            {siteError ? (
+              <p className="mt-3 text-sm font-semibold text-red-200">{siteError}</p>
+            ) : null}
+
+            {managedSites.length > 0 ? (
+              <div className="mt-5 flex flex-wrap gap-2">
+                {managedSites.map((site) => (
+                  <button
+                    key={site}
+                    type="button"
+                    onClick={() => removeManagedSite(site)}
+                    className="inline-flex max-w-full items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-200 ring-1 ring-white/10"
+                    title="Remove site"
+                  >
+                    <Globe className="h-3.5 w-3.5 text-cyan-200" />
+                    <span className="max-w-56 truncate">{site}</span>
+                    <X className="h-3.5 w-3.5 text-slate-400" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+function ComposerMenuButton({
+  icon,
+  label,
+  detail,
+  active = false,
+  disabled = false,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  detail?: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-45",
+        active && "bg-cyan-400/10 text-cyan-100"
+      )}
+    >
+      <span className={cn("text-slate-200", active && "text-cyan-200")}>
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {detail ? (
+        <span className="shrink-0 text-xs font-medium text-slate-400">
+          {detail}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+function SitesMenuOption({
+  icon,
+  label,
+  active = false,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-100 transition hover:bg-white/10",
+        active && "bg-white/5"
+      )}
+    >
+      <span className="text-slate-200">{icon}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {active ? <Check className="h-4 w-4 text-white" /> : null}
+    </button>
   );
 }

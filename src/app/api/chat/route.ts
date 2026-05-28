@@ -1,5 +1,5 @@
 import { openai } from "@ai-sdk/openai";
-import { streamText } from "ai";
+import { streamText, type ModelMessage, type UserContent } from "ai";
 import { NextResponse } from "next/server";
 import { getAiModel, getModePrompt } from "@/config/ai-models";
 import { requireActiveUser } from "@/lib/current-user";
@@ -32,6 +32,10 @@ export async function POST(req: Request) {
     conversationId,
     message,
     model,
+    attachments,
+    composerMode,
+    siteSearchMode,
+    sites,
     retry,
     retryInstruction,
     retryMode,
@@ -126,9 +130,58 @@ export async function POST(req: Request) {
 
   const finalUserContent = retry
     ? `${message}\n\n${retryDirective}`
-    : message;
+    : [
+        message,
+        composerMode === "THINKING"
+          ? "Work in thinking mode: reason carefully, check assumptions, and give a more robust answer."
+          : "",
+        composerMode === "DEEP_RESEARCH"
+          ? "Work in deep research mode. Live browsing is not connected yet, so clearly separate known information from items that need current verification."
+          : "",
+        composerMode === "WEB_SEARCH"
+          ? "Work in web search mode. Live web search is not connected yet, so do not claim fresh verification; say what should be checked online."
+          : "",
+        (composerMode === "DEEP_RESEARCH" || composerMode === "WEB_SEARCH") &&
+        siteSearchMode === "SPECIFIC" &&
+        sites.length > 0
+          ? `Focus the research on these specific sites only when discussing source scope: ${sites.join(", ")}. If live browsing is required, say these sites should be checked directly.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
 
-  const history = historyMessages.map((msg) => ({
+  const attachmentParts: Exclude<UserContent, string> = [];
+
+  for (const attachment of attachments) {
+    if (attachment.kind === "image" && attachment.dataUrl) {
+      attachmentParts.push({
+        type: "image",
+        image: attachment.dataUrl,
+        mediaType: attachment.type || undefined,
+      });
+      continue;
+    }
+
+    if (attachment.kind === "text" && attachment.text) {
+      attachmentParts.push({
+        type: "text",
+        text: `Attached file: ${attachment.name}\n\n${attachment.text}`,
+      });
+    }
+  }
+
+  const userContent: UserContent =
+    attachmentParts.length > 0
+      ? [
+          {
+            type: "text",
+            text: finalUserContent,
+          },
+          ...attachmentParts,
+        ]
+      : finalUserContent;
+
+  const history: ModelMessage[] = historyMessages.map((msg) => ({
     role:
       msg.role === "USER"
         ? ("user" as const)
@@ -159,7 +212,7 @@ ${getModePrompt(conversation.mode)}
       ...history,
       {
         role: "user",
-        content: finalUserContent,
+        content: userContent,
       },
     ],
     onFinish: async ({ text, totalUsage }) => {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Clock3, Image, Menu, MessageSquarePlus, X } from "lucide-react";
+import { Clock3, Image as ImageIcon, Menu, MessageSquarePlus, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { MountedUserButton } from "@/components/auth/mounted-user-button";
@@ -69,7 +69,7 @@ export function MobileAppHeader({ conversations = [] }: MobileAppHeaderProps) {
               onCreated={() => setOpen(false)}
               className="mb-1 flex items-center justify-center gap-2 rounded-2xl bg-fuchsia-400/15 px-4 py-2.5 text-sm font-black text-fuchsia-100 ring-1 ring-fuchsia-300/20 transition hover:bg-fuchsia-400/20 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Image className="h-4 w-4" />
+              <ImageIcon className="h-4 w-4" />
               Create image
             </CreateConversationButton>
 

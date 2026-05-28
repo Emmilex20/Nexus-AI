@@ -7,7 +7,7 @@ import {
   ArrowRight,
   Eye,
   EyeOff,
-  Image,
+  Image as ImageIcon,
   MessageSquarePlus,
 } from "lucide-react";
 import { MountedUserButton } from "@/components/auth/mounted-user-button";
@@ -65,7 +65,7 @@ export function AppSidebar({ conversations = [] }: AppSidebarProps) {
         className="mt-2 flex w-full items-center justify-between rounded-2xl border border-fuchsia-300/20 bg-fuchsia-400/10 px-3.5 py-2.5 text-xs font-black text-fuchsia-100 transition hover:bg-fuchsia-400/15 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <span className="inline-flex items-center gap-2.5">
-          <Image className="h-4 w-4" />
+          <ImageIcon className="h-4 w-4" />
           Create image
         </span>
         <ArrowRight className="h-4 w-4" />

@@ -850,15 +850,15 @@ async function askNexus(
 
         const data = await readJsonResponse<NexusChatResponse>(res, endpoint);
 
-  if (!res.ok || !data.answer) {
-    throw new Error(
-      data.error ||
-        getApiResponseErrorMessage(
-          res.status,
-          endpoint,
-          "The chat endpoint did not return an answer."
-        )
-    );
+        if (!res.ok || !data.answer) {
+          throw new Error(
+            data.error ||
+              getApiResponseErrorMessage(
+                res.status,
+                endpoint,
+                "The chat endpoint did not return an answer."
+              )
+          );
         }
 
         showAnswerPanel(data.answer, {

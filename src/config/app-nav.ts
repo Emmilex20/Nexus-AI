@@ -2,6 +2,7 @@ import {
   CreditCard,
   FolderKanban,
   History,
+  Image,
   LayoutDashboard,
   Settings,
 } from "lucide-react";
@@ -16,6 +17,11 @@ export const appNavItems = [
     label: "Projects",
     href: "/projects",
     icon: FolderKanban,
+  },
+  {
+    label: "Media",
+    href: "/media",
+    icon: Image,
   },
   {
     label: "History",

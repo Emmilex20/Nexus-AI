@@ -15,7 +15,7 @@ export const chatRequestSchema = z.object({
   message: z.string().min(1).max(8000),
   model: z.enum(["gpt-4o-mini", "gpt-4.1-mini"]).default("gpt-4o-mini"),
   composerMode: z
-    .enum(["DEFAULT", "THINKING", "DEEP_RESEARCH", "WEB_SEARCH"])
+    .enum(["DEFAULT", "THINKING", "DEEP_RESEARCH", "WEB_SEARCH", "IMAGE"])
     .default("DEFAULT"),
   siteSearchMode: z.enum(["WEB", "SPECIFIC"]).default("WEB"),
   sites: z.array(z.string().url().max(300)).max(10).default([]),

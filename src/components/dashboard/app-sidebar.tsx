@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Eye,
   EyeOff,
+  Image,
   MessageSquarePlus,
 } from "lucide-react";
 import { MountedUserButton } from "@/components/auth/mounted-user-button";
@@ -54,6 +55,18 @@ export function AppSidebar({ conversations = [] }: AppSidebarProps) {
         <span className="inline-flex items-center gap-2.5">
           <MessageSquarePlus className="h-4 w-4" />
           New chat
+        </span>
+        <ArrowRight className="h-4 w-4" />
+      </CreateConversationButton>
+
+      <CreateConversationButton
+        title="Image generation"
+        intent="image"
+        className="mt-2 flex w-full items-center justify-between rounded-2xl border border-fuchsia-300/20 bg-fuchsia-400/10 px-3.5 py-2.5 text-xs font-black text-fuchsia-100 transition hover:bg-fuchsia-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <span className="inline-flex items-center gap-2.5">
+          <Image className="h-4 w-4" />
+          Create image
         </span>
         <ArrowRight className="h-4 w-4" />
       </CreateConversationButton>

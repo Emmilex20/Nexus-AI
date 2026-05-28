@@ -8,6 +8,7 @@ import { MessageSquarePlus } from "lucide-react";
 type CreateConversationButtonProps = {
   title?: string;
   mode?: "CHAT" | "SEARCH" | "CODE" | "FILE";
+  intent?: "chat" | "image";
   label?: string;
   className?: string;
   onCreated?: (conversationId: string) => void;
@@ -17,6 +18,7 @@ type CreateConversationButtonProps = {
 export function CreateConversationButton({
   title = "New conversation",
   mode = "CHAT",
+  intent = "chat",
   label = "New chat",
   className,
   onCreated,
@@ -51,8 +53,9 @@ export function CreateConversationButton({
       }
 
       const conversationId = data.conversation.id as string;
+      const intentParam = intent === "image" ? "&intent=image" : "";
 
-      router.push(`/chat?conversationId=${conversationId}`);
+      router.push(`/chat?conversationId=${conversationId}${intentParam}`);
       onCreated?.(conversationId);
       router.refresh();
     } catch (error) {

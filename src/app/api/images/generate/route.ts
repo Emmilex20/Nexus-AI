@@ -1,157 +1,12 @@
 import { NextResponse } from "next/server";
-import { imageGenerationConfig } from "@/config/billing";
 import { requireActiveUser } from "@/lib/current-user";
 import {
-  getImageGenerationAccessStatus,
-  IMAGE_GENERATION_ACTION,
-} from "@/lib/plan-access";
-import { prisma } from "@/lib/prisma";
+  generateConversationImage,
+  ImageGenerationError,
+} from "@/lib/image-generation-service";
 import { imageGenerationRequestSchema } from "@/lib/validators/image-generation";
 
 export const maxDuration = 120;
-
-type OpenAIImageResult = {
-  b64_json?: string;
-  revised_prompt?: string;
-  url?: string;
-};
-
-type OpenAIImageResponse = {
-  data?: OpenAIImageResult[];
-  output_format?: string;
-  usage?: {
-    total_tokens?: number;
-  };
-  error?: {
-    message?: string;
-  };
-};
-
-class ImageGenerationError extends Error {
-  status: number;
-
-  constructor(message: string, status = 502) {
-    super(message);
-    this.status = status;
-  }
-}
-
-function blockquote(value: string) {
-  return value
-    .trim()
-    .split("\n")
-    .map((line) => `> ${line}`)
-    .join("\n");
-}
-
-function buildGeneratedImageContent({
-  imageId,
-  prompt,
-  revisedPrompt,
-  model,
-  size,
-  quality,
-  creditsUsed,
-}: {
-  imageId: string;
-  prompt: string;
-  revisedPrompt?: string;
-  model: string;
-  size: string;
-  quality: string;
-  creditsUsed: number;
-}) {
-  return [
-    "Generated image ready.",
-    `![Generated image](/api/generated-images/${imageId})`,
-    `Prompt:\n\n${blockquote(prompt)}`,
-    revisedPrompt ? `Revised prompt:\n\n${blockquote(revisedPrompt)}` : "",
-    `Model: ${model} | Size: ${size} | Quality: ${quality} | Credits used: ${creditsUsed}`,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-async function getImageBase64(image: OpenAIImageResult) {
-  if (image.b64_json) {
-    return image.b64_json;
-  }
-
-  if (!image.url) {
-    throw new ImageGenerationError("OpenAI did not return an image.");
-  }
-
-  const imageResponse = await fetch(image.url);
-
-  if (!imageResponse.ok) {
-    throw new ImageGenerationError("Generated image could not be downloaded.");
-  }
-
-  return Buffer.from(await imageResponse.arrayBuffer()).toString("base64");
-}
-
-async function createOpenAIImage({
-  prompt,
-  size,
-  quality,
-}: {
-  prompt: string;
-  size: string;
-  quality: string;
-}) {
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    throw new ImageGenerationError(
-      "Image generation is not configured. Add OPENAI_API_KEY in production.",
-      500
-    );
-  }
-
-  const model = process.env.OPENAI_IMAGE_MODEL?.trim() || imageGenerationConfig.model;
-  const response = await fetch("https://api.openai.com/v1/images/generations", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      prompt,
-      n: 1,
-      size,
-      quality,
-      output_format: imageGenerationConfig.outputFormat,
-      output_compression: imageGenerationConfig.outputCompression,
-      moderation: "auto",
-    }),
-  });
-
-  const data = (await response.json().catch(() => null)) as
-    | OpenAIImageResponse
-    | null;
-
-  if (!response.ok) {
-    throw new ImageGenerationError(
-      data?.error?.message || "OpenAI image generation failed.",
-      response.status >= 400 && response.status < 500 ? response.status : 502
-    );
-  }
-
-  const image = data?.data?.[0];
-
-  if (!image) {
-    throw new ImageGenerationError("OpenAI did not return an image.");
-  }
-
-  return {
-    imageBase64: await getImageBase64(image),
-    model,
-    outputFormat: data?.output_format || imageGenerationConfig.outputFormat,
-    revisedPrompt: image.revised_prompt,
-    tokensUsed: data?.usage?.total_tokens ?? 0,
-  };
-}
 
 export async function POST(req: Request) {
   const user = await requireActiveUser();
@@ -174,169 +29,15 @@ export async function POST(req: Request) {
   }
 
   const { conversationId, prompt, size, quality } = parsed.data;
-  const creditsUsed = imageGenerationConfig.creditsPerImage;
-  const access = await getImageGenerationAccessStatus(user);
-
-  if (!access.ok) {
-    return NextResponse.json(access.body, { status: access.status });
-  }
-
-  if (user.credits < creditsUsed) {
-    return NextResponse.json(
-      {
-        error: "Not enough credits for image generation",
-        requiredCredits: creditsUsed,
-        currentCredits: user.credits,
-      },
-      { status: 402 }
-    );
-  }
-
-  const conversation = await prisma.conversation.findFirst({
-    where: {
-      id: conversationId,
-      userId: user.id,
-      archived: false,
-    },
-  });
-
-  if (!conversation) {
-    return NextResponse.json(
-      { error: "Conversation not found" },
-      { status: 404 }
-    );
-  }
-
-  let creditsReserved = false;
 
   try {
-    const creditReservation = await prisma.user.updateMany({
-      where: {
-        id: user.id,
-        credits: {
-          gte: creditsUsed,
-        },
-      },
-      data: {
-        credits: {
-          decrement: creditsUsed,
-        },
-      },
-    });
-
-    if (creditReservation.count === 0) {
-      return NextResponse.json(
-        {
-          error: "Not enough credits for image generation",
-          requiredCredits: creditsUsed,
-        },
-        { status: 402 }
-      );
-    }
-
-    creditsReserved = true;
-
-    const generated = await createOpenAIImage({
+    const result = await generateConversationImage({
+      user,
+      conversationId,
       prompt,
       size,
       quality,
     });
-
-    const result = await prisma.$transaction(async (tx) => {
-      const userMessage = await tx.message.create({
-        data: {
-          role: "USER",
-          content: prompt,
-          conversationId,
-          userId: user.id,
-        },
-      });
-
-      const assistantMessage = await tx.message.create({
-        data: {
-          role: "ASSISTANT",
-          content: "Generated image ready.",
-          model: generated.model,
-          tokensUsed: generated.tokensUsed,
-          conversationId,
-          userId: user.id,
-        },
-      });
-
-      const generatedImage = await tx.generatedImage.create({
-        data: {
-          userId: user.id,
-          conversationId,
-          messageId: assistantMessage.id,
-          prompt,
-          revisedPrompt: generated.revisedPrompt,
-          model: generated.model,
-          size,
-          quality,
-          outputFormat: generated.outputFormat,
-          imageBase64: generated.imageBase64,
-        },
-      });
-
-      const assistantContent = buildGeneratedImageContent({
-        imageId: generatedImage.id,
-        prompt,
-        revisedPrompt: generated.revisedPrompt,
-        model: generated.model,
-        size,
-        quality,
-        creditsUsed,
-      });
-
-      const finalAssistantMessage = await tx.message.update({
-        where: {
-          id: assistantMessage.id,
-        },
-        data: {
-          content: assistantContent,
-        },
-      });
-
-      await tx.usageLog.create({
-        data: {
-          userId: user.id,
-          action: IMAGE_GENERATION_ACTION,
-          model: generated.model,
-          tokensUsed: generated.tokensUsed,
-          creditsUsed,
-        },
-      });
-
-      await tx.conversation.update({
-        where: {
-          id: conversationId,
-        },
-        data: {
-          title:
-            conversation.title === "New conversation"
-              ? prompt.slice(0, 60)
-              : conversation.title,
-          updatedAt: new Date(),
-        },
-      });
-
-      return {
-        userMessage,
-        assistantMessage: finalAssistantMessage,
-        generatedImage,
-      };
-    });
-
-    const freshUser = await prisma.user
-      .findUnique({
-        where: {
-          id: user.id,
-        },
-        select: {
-          credits: true,
-        },
-      })
-      .catch(() => null);
 
     return NextResponse.json({
       userMessage: result.userMessage,
@@ -348,29 +49,11 @@ export async function POST(req: Request) {
         size: result.generatedImage.size,
         quality: result.generatedImage.quality,
       },
-      credits: freshUser?.credits ?? Math.max(0, user.credits - creditsUsed),
-      creditsUsed,
-      monthlyUsage: {
-        used: access.used + 1,
-        limit: access.limit,
-      },
+      credits: result.credits,
+      creditsUsed: result.creditsUsed,
+      monthlyUsage: result.monthlyUsage,
     });
   } catch (error) {
-    if (creditsReserved) {
-      await prisma.user
-        .update({
-          where: {
-            id: user.id,
-          },
-          data: {
-            credits: {
-              increment: creditsUsed,
-            },
-          },
-        })
-        .catch(() => null);
-    }
-
     const status = error instanceof ImageGenerationError ? error.status : 500;
 
     return NextResponse.json(

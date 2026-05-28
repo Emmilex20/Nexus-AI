@@ -2,12 +2,18 @@ import { openai } from "@ai-sdk/openai";
 import { streamText, type ModelMessage, type UserContent } from "ai";
 import { NextResponse } from "next/server";
 import { getAiModel, getModePrompt } from "@/config/ai-models";
+import { imageGenerationConfig } from "@/config/billing";
 import { requireActiveUser } from "@/lib/current-user";
+import {
+  generateConversationImage,
+  ImageGenerationError,
+} from "@/lib/image-generation-service";
+import { looksLikeImageGenerationPrompt } from "@/lib/image-generation-intent";
 import { getPlanModelAccessError } from "@/lib/plan-access";
 import { prisma } from "@/lib/prisma";
 import { chatRequestSchema } from "@/lib/validators/chat";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 function getBase64ImageData(dataUrl: string) {
   const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
@@ -58,6 +64,46 @@ export async function POST(req: Request) {
     retryMode,
     retryTargetMessageId,
   } = parsed.data;
+
+  if (
+    !retry &&
+    attachments.length === 0 &&
+    (composerMode === "IMAGE" ||
+      (composerMode === "DEFAULT" && looksLikeImageGenerationPrompt(message)))
+  ) {
+    try {
+      const result = await generateConversationImage({
+        user,
+        conversationId,
+        prompt: message,
+        size: imageGenerationConfig.size,
+        quality: imageGenerationConfig.quality,
+      });
+
+      return new Response(
+        `0:${JSON.stringify(result.assistantMessage.content)}\n`,
+        {
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "x-nexus-generation-type": "image",
+          },
+        }
+      );
+    } catch (error) {
+      const status = error instanceof ImageGenerationError ? error.status : 500;
+
+      return NextResponse.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Image generation failed.",
+        },
+        { status }
+      );
+    }
+  }
+
   const selectedModel = getAiModel(model);
   const modelAccessError = getPlanModelAccessError(user.plan, selectedModel.id);
 

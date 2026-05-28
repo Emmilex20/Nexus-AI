@@ -4,6 +4,7 @@ import {
   Brain,
   Code2,
   FileText,
+  Image as ImageIcon,
   Search,
   Sparkles,
 } from "lucide-react";
@@ -16,6 +17,7 @@ type ChatPageProps = {
   searchParams: Promise<{
     conversationId?: string;
     projectId?: string;
+    intent?: string;
   }>;
 };
 
@@ -48,6 +50,14 @@ const starterMessages = [
     mode: "FILE" as const,
     icon: FileText,
   },
+  {
+    label: "Create an image",
+    title: "Image generation",
+    description: "Generate saved images from a prompt.",
+    mode: "CHAT" as const,
+    intent: "image" as const,
+    icon: ImageIcon,
+  },
 ];
 
 export default async function ChatPage({ searchParams }: ChatPageProps) {
@@ -59,6 +69,7 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
 
   const params = await searchParams;
   const conversationId = params.conversationId;
+  const initialComposerMode = params.intent === "image" ? "IMAGE" : "DEFAULT";
 
   if (conversationId) {
     const conversation = await prisma.conversation.findFirst({
@@ -86,6 +97,7 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
           conversationId={conversation.id}
           conversationTitle={conversation.title}
           conversationMode={conversation.mode}
+          initialComposerMode={initialComposerMode}
           initialPlan={user.plan}
           initialCredits={user.credits}
           initialMessages={conversation.messages}
@@ -129,6 +141,7 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
                   key={item.label}
                   title={item.title}
                   mode={item.mode}
+                  intent={item.intent}
                   label={item.label}
                   className="group inline-flex items-center gap-2 rounded-full border border-white/10 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
                 >

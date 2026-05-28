@@ -31,6 +31,7 @@ import { useChatPreferences } from "@/components/chat/chat-preferences";
 import { aiModels, chatModes, type AiModelId } from "@/config/ai-models";
 import type { ChatMode } from "@/config/ai-models";
 import { imageGenerationConfig, planLimits } from "@/config/billing";
+import { looksLikeImageGenerationPrompt } from "@/lib/image-generation-intent";
 import { cn } from "@/lib/utils";
 
 type DbMessage = {
@@ -44,6 +45,7 @@ type ChatPanelProps = {
   conversationId: string;
   conversationTitle: string;
   conversationMode: ChatMode;
+  initialComposerMode?: ComposerMode;
   initialPlan: Plan;
   initialCredits: number;
   initialMessages: DbMessage[];
@@ -111,30 +113,6 @@ const composerModeLabels: Record<ComposerMode, string> = {
   IMAGE: "Image",
 };
 
-function looksLikeImageGenerationPrompt(value: string) {
-  const normalized = value.trim().toLowerCase().replace(/\s+/g, " ");
-
-  if (!normalized) return false;
-
-  const asksForPromptOnly =
-    /^(please\s+)?(can you\s+|could you\s+|would you\s+)?(generate|create|make|write)\s+(me\s+)?(an?\s+)?(image\s+)?prompt\b/.test(
-      normalized
-    );
-
-  if (asksForPromptOnly) return false;
-
-  const imageNouns =
-    /\b(image|picture|photo|illustration|artwork|poster|logo|icon|avatar|wallpaper|banner|thumbnail|cover art)\b/;
-  const directImageCommand =
-    /^(please\s+)?(can you\s+|could you\s+|would you\s+)?(generate|create|make|draw|paint|sketch|render|design|produce)\s+(me\s+)?(an?\s+|the\s+)?(image|picture|photo|illustration|artwork|poster|logo|icon|avatar|wallpaper|banner|thumbnail|cover art)\b/;
-  const commandWithImageTarget =
-    /^(please\s+)?(can you\s+|could you\s+|would you\s+)?(generate|create|make|draw|paint|sketch|render|design|produce)\b/.test(
-      normalized
-    ) && imageNouns.test(normalized);
-
-  return directImageCommand.test(normalized) || commandWithImageTarget;
-}
-
 function mapRole(role: DbMessage["role"]): UiMessage["role"] {
   if (role === "USER") return "user";
   if (role === "ASSISTANT") return "assistant";
@@ -186,6 +164,7 @@ function ChatPanelContent({
   conversationId,
   conversationTitle,
   conversationMode,
+  initialComposerMode = "DEFAULT",
   initialPlan,
   initialCredits,
   initialMessages,
@@ -220,7 +199,8 @@ function ChatPanelContent({
   const [attachmentError, setAttachmentError] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
-  const [composerMode, setComposerMode] = useState<ComposerMode>("DEFAULT");
+  const [composerMode, setComposerMode] =
+    useState<ComposerMode>(initialComposerMode);
   const [siteSearchMode, setSiteSearchMode] = useState<SiteSearchMode>("WEB");
   const [managedSites, setManagedSites] = useState<string[]>([]);
   const [siteInput, setSiteInput] = useState("");

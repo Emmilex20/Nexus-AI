@@ -16,7 +16,7 @@ function getContentType(outputFormat: string) {
   return "application/octet-stream";
 }
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
   const user = await requireActiveUser();
 
   if (!user) {
@@ -39,10 +39,16 @@ export async function GET(_req: Request, { params }: Params) {
     return NextResponse.json({ error: "Image not found" }, { status: 404 });
   }
 
-  return new Response(Buffer.from(image.imageBase64, "base64"), {
-    headers: {
-      "Content-Type": getContentType(image.outputFormat),
-      "Cache-Control": "private, max-age=31536000, immutable",
-    },
-  });
+  const shouldDownload = new URL(req.url).searchParams.get("download") === "1";
+  const headers: Record<string, string> = {
+    "Content-Type": getContentType(image.outputFormat),
+    "Cache-Control": "private, max-age=31536000, immutable",
+  };
+
+  if (shouldDownload) {
+    headers["Content-Disposition"] =
+      `attachment; filename="nexus-generated-image-${imageId}.${image.outputFormat}"`;
+  }
+
+  return new Response(Buffer.from(image.imageBase64, "base64"), { headers });
 }

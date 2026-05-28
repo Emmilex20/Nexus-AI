@@ -2,7 +2,7 @@
   "name": "nexus-ai-vscode",
   "displayName": "Nexus AI",
   "description": "Nexus AI coding assistant for VS Code workspaces.",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "publisher": "nexus-ai",
   "license": "UNLICENSED",
   "engines": {
@@ -196,6 +196,17 @@
           "minimum": 8000,
           "maximum": 80000,
           "description": "Maximum number of characters of workspace context sent with a request."
+        },
+        "nexusAi.permissionMode": {
+          "type": "string",
+          "enum": ["default", "auto-review", "full-access"],
+          "default": "default",
+          "enumDescriptions": [
+            "Preview proposed changes and ask before applying them.",
+            "Preview proposed changes automatically, then wait for you to apply them.",
+            "Apply safe proposed file changes automatically."
+          ],
+          "description": "How Nexus AI handles proposed file changes."
         }
       }
     }

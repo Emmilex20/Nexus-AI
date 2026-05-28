@@ -1,5 +1,5 @@
 import { openai } from "@ai-sdk/openai";
-import { generateObject } from "ai";
+import { generateObject, type UserContent } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAiModel } from "@/config/ai-models";
@@ -14,6 +14,13 @@ const vscodeFileSnapshotSchema = z.object({
   content: z.string().max(60000),
 });
 
+const vscodeImageAttachmentSchema = z.object({
+  kind: z.literal("image"),
+  name: z.string().min(1).max(160),
+  type: z.string().min(1).max(80),
+  dataUrl: z.string().min(1).max(8_000_000),
+});
+
 const vscodeAgentRequestSchema = z.object({
   prompt: z.string().min(1).max(4000),
   selectedText: z.string().max(20000).optional(),
@@ -22,6 +29,10 @@ const vscodeAgentRequestSchema = z.object({
   languageId: z.string().max(80).optional(),
   workspaceName: z.string().max(120).optional(),
   files: z.array(vscodeFileSnapshotSchema).max(12).default([]),
+  attachments: z.array(vscodeImageAttachmentSchema).max(4).default([]),
+  permissionMode: z
+    .enum(["default", "auto-review", "full-access"])
+    .default("default"),
   model: z.enum(["gpt-4o-mini", "gpt-4.1-mini"]).default("gpt-4.1-mini"),
 });
 
@@ -77,6 +88,52 @@ function formatChangeSummary(changes: z.infer<typeof vscodeAgentChangeSchema>[])
     .join("\n");
 }
 
+function getBase64ImageData(dataUrl: string) {
+  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    image: match[2],
+    mediaType: match[1],
+  };
+}
+
+function buildUserContent(
+  userMessage: string,
+  attachments: z.infer<typeof vscodeImageAttachmentSchema>[]
+): UserContent {
+  const attachmentParts: Exclude<UserContent, string> = [];
+
+  for (const attachment of attachments) {
+    const imageData = getBase64ImageData(attachment.dataUrl);
+
+    if (!imageData) {
+      continue;
+    }
+
+    attachmentParts.push({
+      type: "image",
+      image: imageData.image,
+      mediaType: imageData.mediaType ?? attachment.type,
+    });
+  }
+
+  if (attachmentParts.length === 0) {
+    return userMessage;
+  }
+
+  return [
+    {
+      type: "text",
+      text: userMessage,
+    },
+    ...attachmentParts,
+  ];
+}
+
 export async function POST(req: Request) {
   const tokenResult = await getUserFromDeveloperToken(
     req.headers.get("authorization")
@@ -123,6 +180,12 @@ export async function POST(req: Request) {
     parsed.data.workspaceContext
       ? `Workspace map and snippets:\n${parsed.data.workspaceContext}`
       : "",
+    parsed.data.attachments.length > 0
+      ? `Image attachments: ${parsed.data.attachments
+          .map((attachment) => attachment.name)
+          .join(", ")}`
+      : "",
+    `Permission mode selected in VS Code: ${parsed.data.permissionMode}`,
     formatFiles(parsed.data.files),
   ]
     .filter(Boolean)
@@ -155,6 +218,8 @@ You are Nexus AI, a coding agent inside VS Code.
 Return a concise answer and, when appropriate, exact file operations.
 
 Rules for changes:
+- If image attachments are provided, inspect them directly and use what you see.
+- Images may contain screenshots, errors, UI references, mockups, or diagrams.
 - Propose changes only when the user asks you to write, update, fix, implement, refactor, configure, or create code.
 - For create and update actions, content must be the complete final file content, not a patch or excerpt.
 - For delete actions, content must be an empty string.
@@ -165,7 +230,12 @@ Rules for changes:
 - Prefer small, reviewable edits.
 - If no code change is needed, return an empty changes array.
 `,
-      prompt: userMessage,
+      messages: [
+        {
+          role: "user",
+          content: buildUserContent(userMessage, parsed.data.attachments),
+        },
+      ],
     });
 
     const changes = result.object.changes;

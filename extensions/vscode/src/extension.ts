@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 
 const TOKEN_SECRET_KEY = "nexusAi.developerToken";
 const LAST_WELCOME_VERSION_KEY = "nexusAi.lastWelcomeVersion";
-const EXTENSION_VERSION = "0.2.1";
+const EXTENSION_VERSION = "0.3.0";
 const DEFAULT_MODEL = "gpt-4.1-mini";
 const PRODUCTION_API_URL = "https://nexus-ai-jet-kappa.vercel.app";
 const LOCAL_API_URL = "http://localhost:3000";
@@ -13,6 +13,7 @@ const MAX_TREE_FILES = 250;
 const MAX_FILE_CONTEXT_CHARS = 6000;
 const MAX_AGENT_FILE_CHARS = 60000;
 const MAX_AGENT_FILES = 12;
+const MAX_IMAGE_ATTACHMENTS = 4;
 const EXTENSION_URI_AUTHORITY = "nexus-ai.nexus-ai-vscode";
 const EXCLUDED_WORKSPACE_GLOB =
   "{**/node_modules/**,**/.git/**,**/.next/**,**/dist/**,**/build/**,**/coverage/**,**/.vercel/**,**/.turbo/**,**/out/**,**/.cache/**,**/*.lock,**/package-lock.json,**/pnpm-lock.yaml,**/yarn.lock,**/.env,**/.env.*,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif,**/*.webp,**/*.ico,**/*.pdf,**/*.zip,**/*.gz,**/*.tgz,**/*.map}";
@@ -77,8 +78,19 @@ type NexusAgentChange = {
   content?: string;
 };
 
+type NexusPermissionMode = "default" | "auto-review" | "full-access";
+
+type NexusImageAttachment = {
+  kind: "image";
+  name: string;
+  type: string;
+  dataUrl: string;
+};
+
 type NexusAgentPayload = NexusChatPayload & {
   files: NexusFileSnapshot[];
+  attachments: NexusImageAttachment[];
+  permissionMode: NexusPermissionMode;
 };
 
 type NexusAgentResponse = NexusChatResponse & {
@@ -103,6 +115,8 @@ type WebviewMessage = {
   command: string;
   prompt?: string;
   path?: string;
+  permissionMode?: NexusPermissionMode;
+  attachments?: NexusImageAttachment[];
 };
 
 type WorkspaceOverview = {
@@ -113,6 +127,7 @@ type WorkspaceOverview = {
   fileCountLabel: string;
   includeWorkspaceContext: boolean;
   apiUrl: string;
+  permissionMode: NexusPermissionMode;
 };
 
 export function activate(context: vscode.ExtensionContext) {
@@ -264,7 +279,19 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
     webviewView.webview.onDidReceiveMessage(async (message: WebviewMessage) => {
       switch (message.command) {
         case "submit":
-          await this.submitPrompt(message.prompt ?? "");
+          if (message.permissionMode) {
+            await setPermissionMode(message.permissionMode);
+          }
+          await this.submitPrompt(
+            message.prompt ?? "",
+            sanitizeImageAttachments(message.attachments ?? [])
+          );
+          break;
+        case "setPermissionMode":
+          if (message.permissionMode) {
+            await setPermissionMode(message.permissionMode);
+            await this.refresh();
+          }
           break;
         case "applyChanges":
           await this.applyPendingChanges();
@@ -328,7 +355,7 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  async submitPrompt(rawPrompt: string) {
+  async submitPrompt(rawPrompt: string, attachments: NexusImageAttachment[] = []) {
     const prompt = rawPrompt.trim();
 
     if (!prompt || this.busy) {
@@ -355,7 +382,13 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    this.messages.push({ role: "user", content: prompt });
+    this.messages.push({
+      role: "user",
+      content:
+        attachments.length > 0
+          ? `${prompt}\n\n[${attachments.length} image attachment${attachments.length === 1 ? "" : "s"}]`
+          : prompt,
+    });
     this.busy = true;
     this.pendingChanges = [];
     await this.refresh();
@@ -368,6 +401,7 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
         ? await buildWorkspaceContext(editor, this.output)
         : undefined;
       const files = await buildAgentFileSnapshots(editor, this.output);
+      const permissionMode = getPermissionMode();
       const payload: NexusAgentPayload = {
         prompt,
         selectedText: hasSelection
@@ -378,6 +412,8 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
         workspaceName: getWorkspaceName(),
         workspaceContext,
         files,
+        attachments,
+        permissionMode,
         model: DEFAULT_MODEL,
       };
       const data = await requestNexusAgent(token, payload, this.output);
@@ -389,6 +425,18 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
         metadata: formatAgentMetadata(data),
         changes: this.pendingChanges,
       });
+
+      if (this.pendingChanges.length > 0 && permissionMode === "auto-review") {
+        await this.openReviewPreviews(this.pendingChanges);
+        this.messages.push({
+          role: "system",
+          content: "Opened proposed change previews. Review them, then apply when ready.",
+        });
+      }
+
+      if (this.pendingChanges.length > 0 && permissionMode === "full-access") {
+        await this.applyPendingChanges({ skipConfirmation: true });
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Nexus AI request failed";
       this.output.appendLine(message);
@@ -403,28 +451,31 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async applyPendingChanges() {
+  private async applyPendingChanges(options: { skipConfirmation?: boolean } = {}) {
     if (this.pendingChanges.length === 0) {
       vscode.window.showInformationMessage("No Nexus AI changes to apply.");
       return;
     }
 
-    const action = await vscode.window.showWarningMessage(
-      `Apply ${this.pendingChanges.length} Nexus AI file change${this.pendingChanges.length === 1 ? "" : "s"}?`,
-      { modal: true },
-      "Apply"
-    );
+    const action = options.skipConfirmation
+      ? "Apply"
+      : await vscode.window.showWarningMessage(
+          `Apply ${this.pendingChanges.length} Nexus AI file change${this.pendingChanges.length === 1 ? "" : "s"}?`,
+          { modal: true },
+          "Apply"
+        );
 
     if (action !== "Apply") {
       return;
     }
 
     try {
+      const appliedChanges = [...this.pendingChanges];
       const applied = await applyAgentChanges(this.pendingChanges);
 
       this.messages.push({
         role: "system",
-        content: `Applied ${applied} file change${applied === 1 ? "" : "s"}.`,
+        content: `${options.skipConfirmation ? "Full access applied" : "Applied"} ${applied} file change${applied === 1 ? "" : "s"}${appliedChanges.length > 0 ? `: ${appliedChanges.map((change) => change.path).join(", ")}` : ""}.`,
       });
       this.pendingChanges = [];
       this.workspaceProvider.refresh();
@@ -459,6 +510,24 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
       await vscode.window.showTextDocument(document, vscode.ViewColumn.Active);
     } catch {
       vscode.window.showInformationMessage("That file does not exist yet.");
+    }
+  }
+
+  private async openReviewPreviews(changes: NexusAgentChange[]) {
+    const previewable = changes
+      .filter((change) => change.action !== "delete" && change.content !== undefined)
+      .slice(0, 3);
+
+    for (const change of previewable) {
+      const document = await vscode.workspace.openTextDocument({
+        content: change.content ?? "",
+        language: getFenceLanguage(change.path),
+      });
+
+      await vscode.window.showTextDocument(document, {
+        preview: true,
+        viewColumn: vscode.ViewColumn.Beside,
+      });
     }
   }
 }
@@ -1022,6 +1091,7 @@ async function getWorkspaceOverview(): Promise<WorkspaceOverview> {
       files.length >= MAX_TREE_FILES ? `${MAX_TREE_FILES}+` : String(files.length),
     includeWorkspaceContext: getWorkspaceContextEnabled(),
     apiUrl: getApiUrl(),
+    permissionMode: getPermissionMode(),
   };
 }
 
@@ -1193,6 +1263,7 @@ function getAssistantViewHtml({
   const workspaceStatus = overview.hasWorkspace ? "Workspace ready" : "No folder open";
   const renderedMessages = messages.map(renderAssistantMessage).join("");
   const renderedChanges = renderPendingChanges(pendingChanges);
+  const permissionLabel = getPermissionLabel(overview.permissionMode);
 
   return `<!doctype html>
 <html lang="en">
@@ -1422,19 +1493,122 @@ function getAssistantViewHtml({
 
       .composer {
         border-top: 1px solid var(--vscode-panel-border);
-        padding: 12px;
+        padding: 10px;
+      }
+
+      .composer-box {
+        background: var(--vscode-input-background);
+        border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+        border-radius: 16px;
+        padding: 8px;
+      }
+
+      .composer-row {
+        align-items: center;
+        display: flex;
+        gap: 8px;
+        justify-content: space-between;
+        margin-top: 8px;
+      }
+
+      .left-tools,
+      .right-tools {
+        align-items: center;
+        display: flex;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .icon-button {
+        align-items: center;
+        background: var(--vscode-button-secondaryBackground);
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 999px;
+        color: var(--vscode-button-secondaryForeground);
+        display: inline-flex;
+        height: 30px;
+        justify-content: center;
+        margin: 0;
+        min-width: 30px;
+        padding: 0 10px;
+        text-align: center;
+        width: auto;
+      }
+
+      .send-button {
+        align-items: center;
+        border-radius: 999px;
+        display: inline-flex;
+        height: 32px;
+        justify-content: center;
+        margin: 0;
+        min-width: 38px;
+        padding: 0 12px;
+        width: auto;
+      }
+
+      .permission-select {
+        background: var(--vscode-dropdown-background);
+        border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border));
+        border-radius: 999px;
+        color: var(--vscode-dropdown-foreground);
+        font: inherit;
+        font-size: 12px;
+        height: 30px;
+        max-width: 155px;
+        padding: 0 8px;
+      }
+
+      .attachments {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .attachment {
+        align-items: center;
+        background: var(--vscode-editor-background);
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 8px;
+        display: flex;
+        gap: 8px;
+        max-width: 100%;
+        padding: 5px;
+      }
+
+      .attachment img {
+        border-radius: 6px;
+        height: 38px;
+        object-fit: cover;
+        width: 48px;
+      }
+
+      .attachment span {
+        color: var(--vscode-descriptionForeground);
+        font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .drop-hint {
+        color: var(--vscode-descriptionForeground);
+        font-size: 11px;
+        margin-top: 6px;
       }
 
       textarea {
-        background: var(--vscode-input-background);
-        border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
-        border-radius: 8px;
+        background: transparent;
+        border: 0;
+        box-sizing: border-box;
         color: var(--vscode-input-foreground);
         display: block;
         font-family: var(--vscode-font-family);
         line-height: 1.45;
-        min-height: 88px;
-        padding: 10px;
+        min-height: 82px;
+        outline: none;
+        padding: 4px;
         resize: vertical;
         width: 100%;
       }
@@ -1455,6 +1629,7 @@ function getAssistantViewHtml({
           <span class="pill ${connected ? "connected" : "disconnected"}">${status}</span>
           <span class="pill neutral">${escapeHtml(workspaceStatus)}</span>
           <p>${escapeHtml(apiMode)}: <code>${escapeHtml(overview.apiUrl)}</code></p>
+          <p>Permissions: ${escapeHtml(permissionLabel)}</p>
           <p>${escapeHtml(overview.workspaceName)} · ${escapeHtml(overview.fileCountLabel)} files · context ${overview.includeWorkspaceContext ? "on" : "off"}</p>
           ${overview.activeFile ? `<p>Active file: ${escapeHtml(overview.activeFile)}</p>` : ""}
         </div>
@@ -1467,10 +1642,26 @@ function getAssistantViewHtml({
       </div>
 
       <form class="composer" id="composer">
-        <textarea id="prompt" ${busy ? "disabled" : ""} placeholder="Ask Nexus AI to build, fix, refactor, update files, add tests..."></textarea>
-        <button id="send" type="submit" ${busy ? "disabled" : ""}>${busy ? "Working..." : "Send"}</button>
-        <button type="button" class="secondary" onclick="send('connect')">${connected ? "Reconnect" : "Connect"}</button>
-        <button type="button" class="secondary" onclick="send('refreshWorkspace')">Refresh workspace</button>
+        <div class="composer-box" id="composerBox">
+          <div class="attachments" id="attachments"></div>
+          <textarea id="prompt" ${busy ? "disabled" : ""} placeholder="Ask Nexus AI to build, fix, refactor, inspect an image..."></textarea>
+          <div class="composer-row">
+            <div class="left-tools">
+              <button class="icon-button" type="button" id="attachButton" title="Attach images">+</button>
+              <select class="permission-select" id="permissionMode" title="Permission mode">
+                <option value="default" ${overview.permissionMode === "default" ? "selected" : ""}>Default</option>
+                <option value="auto-review" ${overview.permissionMode === "auto-review" ? "selected" : ""}>Auto-review</option>
+                <option value="full-access" ${overview.permissionMode === "full-access" ? "selected" : ""}>Full access</option>
+              </select>
+            </div>
+            <div class="right-tools">
+              <button class="icon-button" type="button" onclick="send('connect')" title="${connected ? "Reconnect" : "Connect"}">${connected ? "On" : "Off"}</button>
+              <button class="send-button" id="send" type="submit" ${busy ? "disabled" : ""}>${busy ? "..." : "Send"}</button>
+            </div>
+          </div>
+          <div class="drop-hint">Paste, drop, or attach images. Ctrl+Enter sends.</div>
+          <input id="imageInput" type="file" accept="image/*" multiple hidden />
+        </div>
       </form>
     </div>
     <script>
@@ -1481,11 +1672,92 @@ function getAssistantViewHtml({
       function openFile(path) {
         vscode.postMessage({ command: 'openFile', path });
       }
+      const attachments = [];
+      const imageInput = document.getElementById('imageInput');
+      const attachmentList = document.getElementById('attachments');
+      const permissionMode = document.getElementById('permissionMode');
+      const composerBox = document.getElementById('composerBox');
+
+      function renderAttachments() {
+        attachmentList.innerHTML = attachments.map((attachment, index) => (
+          '<div class="attachment">' +
+          '<img src="' + attachment.dataUrl + '" alt="" />' +
+          '<span title="' + escapeAttribute(attachment.name) + '">' + escapeHtml(attachment.name) + '</span>' +
+          '<button class="icon-button" type="button" onclick="removeAttachment(' + index + ')" title="Remove image">x</button>' +
+          '</div>'
+        )).join('');
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function escapeAttribute(value) {
+        return escapeHtml(value).replace(new RegExp(String.fromCharCode(96), 'g'), '&#096;');
+      }
+
+      window.removeAttachment = (index) => {
+        attachments.splice(index, 1);
+        renderAttachments();
+      };
+
+      function addFiles(fileList) {
+        Array.from(fileList || [])
+          .filter((file) => file.type.startsWith('image/'))
+          .slice(0, ${MAX_IMAGE_ATTACHMENTS})
+          .forEach((file) => {
+            if (attachments.length >= ${MAX_IMAGE_ATTACHMENTS}) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+              const dataUrl = String(reader.result || '');
+              if (!dataUrl.startsWith('data:image/')) return;
+              attachments.push({
+                kind: 'image',
+                name: file.name || 'pasted-image',
+                type: file.type || 'image/png',
+                dataUrl,
+              });
+              renderAttachments();
+            };
+            reader.readAsDataURL(file);
+          });
+      }
+
+      document.getElementById('attachButton').addEventListener('click', () => imageInput.click());
+      imageInput.addEventListener('change', () => {
+        addFiles(imageInput.files);
+        imageInput.value = '';
+      });
+      permissionMode.addEventListener('change', () => {
+        vscode.postMessage({ command: 'setPermissionMode', permissionMode: permissionMode.value });
+      });
+      document.addEventListener('paste', (event) => {
+        addFiles(event.clipboardData && event.clipboardData.files);
+      });
+      composerBox.addEventListener('dragover', (event) => {
+        event.preventDefault();
+      });
+      composerBox.addEventListener('drop', (event) => {
+        event.preventDefault();
+        addFiles(event.dataTransfer && event.dataTransfer.files);
+      });
       document.getElementById('composer').addEventListener('submit', (event) => {
         event.preventDefault();
         const prompt = document.getElementById('prompt').value;
-        vscode.postMessage({ command: 'submit', prompt });
+        vscode.postMessage({
+          command: 'submit',
+          prompt,
+          permissionMode: permissionMode.value,
+          attachments: attachments.slice(),
+        });
         document.getElementById('prompt').value = '';
+        attachments.splice(0, attachments.length);
+        renderAttachments();
       });
       document.getElementById('prompt').addEventListener('keydown', (event) => {
         if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
@@ -1750,6 +2022,23 @@ function isUnsafeAgentPath(relativePath: string) {
   );
 }
 
+function sanitizeImageAttachments(attachments: NexusImageAttachment[]) {
+  return attachments
+    .filter(
+      (attachment) =>
+        attachment.kind === "image" &&
+        attachment.dataUrl.startsWith("data:image/") &&
+        attachment.dataUrl.length <= 8_000_000
+    )
+    .slice(0, MAX_IMAGE_ATTACHMENTS)
+    .map((attachment) => ({
+      kind: "image" as const,
+      name: attachment.name.slice(0, 160),
+      type: attachment.type.slice(0, 80),
+      dataUrl: attachment.dataUrl,
+    }));
+}
+
 function getApiUrl() {
   const configured = vscode.workspace.getConfiguration("nexusAi").get<string>("apiUrl");
   return normalizeApiUrl(configured) ?? PRODUCTION_API_URL;
@@ -1804,6 +2093,44 @@ function getWorkspaceContextMaxChars() {
     .get<number>("workspaceContextMaxChars", DEFAULT_WORKSPACE_CONTEXT_CHARS);
 
   return Math.min(Math.max(configured, 8000), 80000);
+}
+
+function getPermissionMode(): NexusPermissionMode {
+  const configured = vscode.workspace
+    .getConfiguration("nexusAi")
+    .get<NexusPermissionMode>("permissionMode", "default");
+
+  return isPermissionMode(configured) ? configured : "default";
+}
+
+async function setPermissionMode(permissionMode: NexusPermissionMode) {
+  if (!isPermissionMode(permissionMode)) {
+    return;
+  }
+
+  await vscode.workspace
+    .getConfiguration("nexusAi")
+    .update("permissionMode", permissionMode, vscode.ConfigurationTarget.Global);
+}
+
+function isPermissionMode(value: unknown): value is NexusPermissionMode {
+  return (
+    value === "default" ||
+    value === "auto-review" ||
+    value === "full-access"
+  );
+}
+
+function getPermissionLabel(permissionMode: NexusPermissionMode) {
+  switch (permissionMode) {
+    case "auto-review":
+      return "Auto-review";
+    case "full-access":
+      return "Full access";
+    case "default":
+    default:
+      return "Default permissions";
+  }
 }
 
 function getWorkspaceName() {

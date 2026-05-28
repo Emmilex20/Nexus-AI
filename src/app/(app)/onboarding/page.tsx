@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Brain, Code2, Search } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { DASHBOARD_VIEW_PARAM } from "@/lib/last-conversation";
 
 const options = [
   {
@@ -52,7 +53,7 @@ export default function OnboardingPage() {
       </div>
 
       <Link
-        href="/dashboard"
+        href={`/dashboard?view=${DASHBOARD_VIEW_PARAM}`}
         className="mt-8 inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-200"
       >
         Continue to dashboard

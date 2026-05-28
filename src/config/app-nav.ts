@@ -7,11 +7,12 @@ import {
   LayoutDashboard,
   Settings,
 } from "lucide-react";
+import { DASHBOARD_VIEW_PARAM } from "@/lib/last-conversation";
 
 export const appNavItems = [
   {
     label: "Dashboard",
-    href: "/dashboard",
+    href: `/dashboard?view=${DASHBOARD_VIEW_PARAM}`,
     icon: LayoutDashboard,
   },
   {

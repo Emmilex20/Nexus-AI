@@ -9,6 +9,7 @@ import { CreateConversationButton } from "@/components/chat/create-conversation-
 import { RecentChatItem } from "@/components/dashboard/recent-chat-item";
 import { BrandMark } from "@/components/shared/brand-mark";
 import { appNavItems } from "@/config/app-nav";
+import { DASHBOARD_VIEW_PARAM } from "@/lib/last-conversation";
 import { cn } from "@/lib/utils";
 
 type MobileConversation = {
@@ -29,7 +30,10 @@ export function MobileAppHeader({ conversations = [] }: MobileAppHeaderProps) {
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[#070a13]/95 backdrop-blur-xl lg:hidden">
       <div className="flex h-14 items-center justify-between px-3">
-        <Link href="/dashboard" className="flex items-center gap-2">
+        <Link
+          href={`/dashboard?view=${DASHBOARD_VIEW_PARAM}`}
+          className="flex items-center gap-2"
+        >
           <BrandMark className="h-9 w-9 rounded-[1rem]" priority />
           <div>
             <p className="text-sm font-black leading-none text-white">Nexus AI</p>
@@ -75,8 +79,10 @@ export function MobileAppHeader({ conversations = [] }: MobileAppHeaderProps) {
 
             {appNavItems.map((item) => {
               const Icon = item.icon;
+              const itemPathname = item.href.split("?")[0];
               const active =
-                pathname === item.href || pathname.startsWith(`${item.href}/`);
+                pathname === itemPathname ||
+                pathname.startsWith(`${itemPathname}/`);
 
               return (
                 <Link

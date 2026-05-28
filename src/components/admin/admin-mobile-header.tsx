@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Menu, ShieldCheck, X } from "lucide-react";
 import { useState } from "react";
 import { adminNavItems } from "@/config/admin-nav";
+import { DASHBOARD_VIEW_PARAM } from "@/lib/last-conversation";
 
 export function AdminMobileHeader() {
   const [open, setOpen] = useState(false);
@@ -47,7 +48,7 @@ export function AdminMobileHeader() {
             })}
 
             <Link
-              href="/dashboard"
+              href={`/dashboard?view=${DASHBOARD_VIEW_PARAM}`}
               onClick={() => setOpen(false)}
               className="rounded-2xl border border-white/10 px-4 py-3 text-center text-sm font-bold text-white"
             >

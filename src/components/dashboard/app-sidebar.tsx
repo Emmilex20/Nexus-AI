@@ -15,6 +15,7 @@ import { CreateConversationButton } from "@/components/chat/create-conversation-
 import { RecentChatItem } from "@/components/dashboard/recent-chat-item";
 import { BrandMark } from "@/components/shared/brand-mark";
 import { appNavItems } from "@/config/app-nav";
+import { DASHBOARD_VIEW_PARAM } from "@/lib/last-conversation";
 import { cn } from "@/lib/utils";
 
 type SidebarConversation = {
@@ -36,7 +37,10 @@ export function AppSidebar({ conversations = [] }: AppSidebarProps) {
 
   return (
     <aside className="sidebar-scrollbar fixed left-0 top-0 z-40 hidden h-screen w-60 flex-col overflow-y-auto border-r border-white/10 bg-[#070a13]/95 p-3.5 lg:flex">
-      <Link href="/dashboard" className="flex items-center gap-2.5 px-1">
+      <Link
+        href={`/dashboard?view=${DASHBOARD_VIEW_PARAM}`}
+        className="flex items-center gap-2.5 px-1"
+      >
         <BrandMark className="h-10 w-10" priority />
 
         <div className="min-w-0">
@@ -74,8 +78,10 @@ export function AppSidebar({ conversations = [] }: AppSidebarProps) {
       <nav className="mt-5 space-y-1">
         {appNavItems.map((item) => {
           const Icon = item.icon;
+          const itemPathname = item.href.split("?")[0];
           const active =
-            pathname === item.href || pathname.startsWith(`${item.href}/`);
+            pathname === itemPathname ||
+            pathname.startsWith(`${itemPathname}/`);
 
           return (
             <Link

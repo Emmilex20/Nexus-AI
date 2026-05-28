@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { adminNavItems } from "@/config/admin-nav";
+import { DASHBOARD_VIEW_PARAM } from "@/lib/last-conversation";
 import { cn } from "@/lib/utils";
 
 export function AdminSidebar() {
@@ -11,7 +12,10 @@ export function AdminSidebar() {
 
   return (
     <aside className="fixed left-0 top-0 hidden h-screen w-72 border-r border-white/10 bg-slate-950 p-5 lg:block">
-      <Link href="/dashboard" className="flex items-center gap-3">
+      <Link
+        href={`/dashboard?view=${DASHBOARD_VIEW_PARAM}`}
+        className="flex items-center gap-3"
+      >
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-500/15 text-red-300">
           <ShieldCheck className="h-5 w-5" />
         </div>
@@ -46,7 +50,7 @@ export function AdminSidebar() {
       </nav>
 
       <Link
-        href="/dashboard"
+        href={`/dashboard?view=${DASHBOARD_VIEW_PARAM}`}
         className="absolute bottom-5 left-5 right-5 flex items-center justify-center gap-2 rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300 transition hover:bg-white/5 hover:text-white"
       >
         <ArrowLeft className="h-4 w-4" />

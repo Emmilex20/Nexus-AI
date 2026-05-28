@@ -40,6 +40,10 @@ import {
 import type { ChatMode } from "@/config/ai-models";
 import { imageGenerationConfig, planLimits } from "@/config/billing";
 import { looksLikeImageGenerationPrompt } from "@/lib/image-generation-intent";
+import {
+  LAST_CONVERSATION_COOKIE,
+  LAST_CONVERSATION_STORAGE_KEY,
+} from "@/lib/last-conversation";
 import { cn } from "@/lib/utils";
 
 type DbMessage = {
@@ -260,6 +264,14 @@ function ChatPanelContent({
   }, [safeSelectedModel, selectedModel, setSelectedModel]);
 
   useEffect(() => {
+    const maxAge = 60 * 60 * 24 * 45;
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+
+    window.localStorage.setItem(LAST_CONVERSATION_STORAGE_KEY, conversationId);
+    document.cookie = `${LAST_CONVERSATION_COOKIE}=${encodeURIComponent(
+      conversationId
+    )}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`;
+
     shouldFollowStreamRef.current = true;
 
     const frame = window.requestAnimationFrame(() => {

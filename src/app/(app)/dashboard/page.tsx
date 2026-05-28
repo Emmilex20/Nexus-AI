@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import {
   ArrowRight,
   Clock3,
@@ -16,6 +18,11 @@ import { CreateConversationButton } from "@/components/chat/create-conversation-
 import { webConversationWhere } from "@/lib/conversation-filters";
 import { getCurrentDbUser } from "@/lib/current-user";
 import { formatDate } from "@/lib/format";
+import {
+  DASHBOARD_VIEW_PARAM,
+  LAST_CONVERSATION_COOKIE,
+  isSafeConversationId,
+} from "@/lib/last-conversation";
 import { prisma } from "@/lib/prisma";
 
 const actions = [
@@ -72,8 +79,38 @@ const assistantModes = [
   },
 ];
 
-export default async function DashboardPage() {
+type DashboardPageProps = {
+  searchParams: Promise<{
+    view?: string;
+  }>;
+};
+
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const user = await getCurrentDbUser();
+  const params = await searchParams;
+
+  if (user && params.view !== DASHBOARD_VIEW_PARAM) {
+    const lastConversationId = (await cookies()).get(
+      LAST_CONVERSATION_COOKIE
+    )?.value;
+
+    if (isSafeConversationId(lastConversationId)) {
+      const lastConversation = await prisma.conversation.findFirst({
+        where: webConversationWhere({
+          id: lastConversationId,
+          userId: user.id,
+          archived: false,
+        }),
+        select: {
+          id: true,
+        },
+      });
+
+      if (lastConversation) {
+        redirect(`/chat?conversationId=${lastConversation.id}`);
+      }
+    }
+  }
 
   const [projectCount, conversationCount, recentConversations, recentProjects] =
     user

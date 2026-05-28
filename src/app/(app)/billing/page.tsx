@@ -1,12 +1,13 @@
-import { Check, Code2, CreditCard, Wallet, Zap } from "lucide-react";
+import { Check, Code2, CreditCard, Image as ImageIcon, Wallet, Zap } from "lucide-react";
 import { getCurrentDbUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
-import { creditPackages, planLimits } from "@/config/billing";
+import { creditPackages, imageGenerationConfig, planLimits } from "@/config/billing";
 import { formatDate } from "@/lib/format";
 import { BillingEventsTable } from "@/components/billing/billing-events-table";
 import { PaymentButton } from "@/components/billing/payment-button";
 import { PaymentHistoryTable } from "@/components/billing/payment-history-table";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { getImageGenerationUsageThisMonth } from "@/lib/plan-access";
 
 export default async function BillingPage() {
   const user = await getCurrentDbUser();
@@ -59,6 +60,10 @@ export default async function BillingPage() {
       })
     : [];
 
+  const imageUsageThisMonth = user
+    ? await getImageGenerationUsageThisMonth(user.id)
+    : 0;
+
   const currentPlan = user ? planLimits[user.plan] : planLimits.FREE;
   const nextPlan =
     user?.plan === "FREE"
@@ -77,7 +82,7 @@ export default async function BillingPage() {
         description="Choose monthly credits, model access and VS Code assistant limits that match how you build."
       />
 
-      <div className="mb-8 grid gap-4 md:grid-cols-4">
+      <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-5">
           <div className="flex items-center gap-3">
             <Wallet className="h-5 w-5 text-violet-300" />
@@ -116,6 +121,18 @@ export default async function BillingPage() {
           <p className="mt-3 text-3xl font-black text-white">
             {currentPlan.vscodeMonthlyRequests > 0
               ? currentPlan.vscodeMonthlyRequests.toLocaleString()
+            : "None"}
+          </p>
+        </div>
+
+        <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-5">
+          <div className="flex items-center gap-3">
+            <ImageIcon className="h-5 w-5 text-violet-300" />
+            <p className="text-sm text-slate-400">Image limit</p>
+          </div>
+          <p className="mt-3 text-3xl font-black text-white">
+            {currentPlan.imageMonthlyGenerations > 0
+              ? `${imageUsageThisMonth}/${currentPlan.imageMonthlyGenerations}`
               : "None"}
           </p>
         </div>
@@ -136,6 +153,10 @@ export default async function BillingPage() {
               {currentPlan.vscodeMonthlyRequests > 0
                 ? `VS Code assistant includes ${currentPlan.vscodeMonthlyRequests.toLocaleString()} requests/month.`
                 : "VS Code assistant starts on Pro."}
+              {" "}
+              {currentPlan.imageMonthlyGenerations > 0
+                ? `Image generation includes ${currentPlan.imageMonthlyGenerations.toLocaleString()} high-quality images/month at ${imageGenerationConfig.creditsPerImage} credits each.`
+                : "OpenAI image generation starts on Pro."}
               {user?.planRenewsAt
                 ? ` Next renewal: ${formatDate(user.planRenewsAt)}.`
                 : " Renewal will appear after a paid plan is activated."}
@@ -184,6 +205,14 @@ export default async function BillingPage() {
                   {plan.vscodeMonthlyRequests > 0
                     ? `${plan.vscodeMonthlyRequests.toLocaleString()} VS Code requests/month`
                     : "No VS Code integration"}
+                </p>
+                <p className="mt-1 text-sm font-bold text-fuchsia-200">
+                  {plan.imageMonthlyGenerations > 0
+                    ? `${plan.imageMonthlyGenerations.toLocaleString()} image generations/month`
+                    : "No image generation"}
+                </p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">
+                  Images use {imageGenerationConfig.creditsPerImage} credits each
                 </p>
 
                 <div className="mt-6 space-y-3">

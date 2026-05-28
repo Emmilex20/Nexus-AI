@@ -1,11 +1,13 @@
 import type { Plan, User } from "@prisma/client";
 import {
+  planHasImageGenerationAccess,
   planAllowsModel,
   planHasVsCodeAccess,
   planLimits,
 } from "@/config/billing";
 import { prisma } from "@/lib/prisma";
 
+export const IMAGE_GENERATION_ACTION = "IMAGE_GENERATION";
 const VSCODE_USAGE_ACTIONS = ["VSCODE_CODE_AGENT", "VSCODE_CODE_ASSIST"];
 
 export function getMonthlyUsageWindowStart(from = new Date()) {
@@ -35,6 +37,57 @@ export async function getVsCodeUsageThisMonth(userId: string) {
       },
     },
   });
+}
+
+export async function getImageGenerationUsageThisMonth(userId: string) {
+  return prisma.usageLog.count({
+    where: {
+      userId,
+      action: IMAGE_GENERATION_ACTION,
+      createdAt: {
+        gte: getMonthlyUsageWindowStart(),
+      },
+    },
+  });
+}
+
+export async function getImageGenerationAccessStatus(
+  user: Pick<User, "id" | "plan">
+) {
+  const plan = planLimits[user.plan];
+
+  if (!planHasImageGenerationAccess(user.plan)) {
+    return {
+      ok: false as const,
+      status: 403,
+      body: {
+        error: "OpenAI image generation is available on Pro, Builder and Team plans.",
+        requiredPlan: "PRO",
+        currentPlan: user.plan,
+      },
+    };
+  }
+
+  const used = await getImageGenerationUsageThisMonth(user.id);
+
+  if (used >= plan.imageMonthlyGenerations) {
+    return {
+      ok: false as const,
+      status: 429,
+      body: {
+        error: `You have reached your ${plan.name} image generation monthly limit.`,
+        currentPlan: user.plan,
+        limit: plan.imageMonthlyGenerations,
+        used,
+      },
+    };
+  }
+
+  return {
+    ok: true as const,
+    used,
+    limit: plan.imageMonthlyGenerations,
+  };
 }
 
 export async function getVsCodeAccessStatus(

@@ -30,7 +30,7 @@ import {
 import { useChatPreferences } from "@/components/chat/chat-preferences";
 import { aiModels, chatModes, type AiModelId } from "@/config/ai-models";
 import type { ChatMode } from "@/config/ai-models";
-import { planLimits } from "@/config/billing";
+import { imageGenerationConfig, planLimits } from "@/config/billing";
 import { cn } from "@/lib/utils";
 
 type DbMessage = {
@@ -66,7 +66,12 @@ type ComposerAttachment = {
   text?: string;
 };
 
-type ComposerMode = "DEFAULT" | "THINKING" | "DEEP_RESEARCH" | "WEB_SEARCH";
+type ComposerMode =
+  | "DEFAULT"
+  | "THINKING"
+  | "DEEP_RESEARCH"
+  | "WEB_SEARCH"
+  | "IMAGE";
 
 type SiteSearchMode = "WEB" | "SPECIFIC";
 
@@ -103,6 +108,7 @@ const composerModeLabels: Record<ComposerMode, string> = {
   THINKING: "Thinking",
   DEEP_RESEARCH: "Deep research",
   WEB_SEARCH: "Web search",
+  IMAGE: "Image",
 };
 
 function mapRole(role: DbMessage["role"]): UiMessage["role"] {
@@ -171,6 +177,10 @@ function ChatPanelContent({
   const [input, setInput] = useState("");
   const { selectedModel, setSelectedModel } = useChatPreferences();
   const allowedModelIds = planLimits[initialPlan].allowedModelIds;
+  const imageMonthlyGenerations =
+    planLimits[initialPlan].imageMonthlyGenerations;
+  const canGenerateImages = imageMonthlyGenerations > 0;
+  const imageCreditsPerGeneration = imageGenerationConfig.creditsPerImage;
   const availableModels = aiModels.filter((model) =>
     allowedModelIds.includes(model.id)
   );
@@ -179,6 +189,9 @@ function ChatPanelContent({
     : availableModels[0]?.id ?? "gpt-4o-mini";
   const [credits, setCredits] = useState(initialCredits);
   const [streaming, setStreaming] = useState(false);
+  const [activeGeneration, setActiveGeneration] = useState<"text" | "image">(
+    "text"
+  );
   const [error, setError] = useState("");
   const [attachmentError, setAttachmentError] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -198,8 +211,20 @@ function ChatPanelContent({
   const sitesMenuRef = useRef<HTMLDivElement | null>(null);
 
   const hasCredits = credits > 0;
+  const hasImageCredits = credits >= imageCreditsPerGeneration;
+  const canSubmit =
+    !streaming &&
+    hasCredits &&
+    (input.trim().length > 0 ||
+      (composerMode !== "IMAGE" && attachments.length > 0)) &&
+    (composerMode !== "IMAGE" || (canGenerateImages && hasImageCredits));
   const currentMode =
     chatModes.find((mode) => mode.id === conversationMode) ?? chatModes[0];
+  const composerPlaceholder = !hasCredits
+    ? "You are out of credits..."
+    : composerMode === "IMAGE"
+      ? `Describe the image to generate (${imageCreditsPerGeneration} credits)...`
+      : "Ask, plan, debug, draft or explore...";
 
   useEffect(() => {
     if (safeSelectedModel !== selectedModel) {
@@ -284,6 +309,7 @@ function ChatPanelContent({
   }) {
     setError("");
     setStreaming(true);
+    setActiveGeneration("text");
 
     try {
       const response = await fetch("/api/chat", {
@@ -374,14 +400,98 @@ function ChatPanelContent({
     }
   }
 
+  async function generateImageResponse({
+    prompt,
+    assistantMessageId,
+  }: {
+    prompt: string;
+    assistantMessageId: string;
+  }) {
+    setError("");
+    setStreaming(true);
+    setActiveGeneration("image");
+
+    try {
+      const response = await fetch("/api/images/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          conversationId,
+          prompt,
+          size: imageGenerationConfig.size,
+          quality: imageGenerationConfig.quality,
+        }),
+      });
+
+      const data = (await response.json().catch(() => null)) as {
+        assistantMessage?: {
+          id: string;
+          content: string;
+        };
+        credits?: number;
+        error?: string;
+      } | null;
+
+      if (!response.ok || !data?.assistantMessage) {
+        throw new Error(data?.error || "Failed to generate image");
+      }
+
+      setMessages((current) =>
+        current.map((msg) =>
+          msg.id === assistantMessageId
+            ? {
+                ...msg,
+                id: data.assistantMessage?.id ?? msg.id,
+                content: data.assistantMessage?.content ?? msg.content,
+              }
+            : msg
+        )
+      );
+
+      if (typeof data.credits === "number") {
+        setCredits(data.credits);
+      } else {
+        await refreshCredits();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+      setMessages((current) =>
+        current.filter((msg) => msg.id !== assistantMessageId)
+      );
+    } finally {
+      setStreaming(false);
+    }
+  }
+
   async function handleSubmit(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
 
+    const requestComposerMode = composerMode;
     const cleanInput =
       input.trim() ||
-      (attachments.length > 0 ? "Please analyze the attached file(s)." : "");
+      (requestComposerMode !== "IMAGE" && attachments.length > 0
+        ? "Please analyze the attached file(s)."
+        : "");
 
     if (!cleanInput || streaming || !hasCredits) return;
+
+    if (requestComposerMode === "IMAGE") {
+      if (!canGenerateImages) {
+        setError(
+          "OpenAI image generation is available on Pro, Builder and Team plans."
+        );
+        return;
+      }
+
+      if (!hasImageCredits) {
+        setError(
+          `Image generation needs ${imageCreditsPerGeneration} credits. You currently have ${credits.toLocaleString()}.`
+        );
+        return;
+      }
+    }
 
     setInput("");
     setAttachmentError("");
@@ -398,16 +508,25 @@ function ChatPanelContent({
     const assistantMessage: UiMessage = {
       id: crypto.randomUUID(),
       role: "assistant",
-      content: "",
+      content:
+        requestComposerMode === "IMAGE" ? "Generating your image..." : "",
     };
 
     setMessages((current) => [...current, userMessage, assistantMessage]);
+
+    if (requestComposerMode === "IMAGE") {
+      await generateImageResponse({
+        prompt: cleanInput,
+        assistantMessageId: assistantMessage.id,
+      });
+      return;
+    }
 
     await streamAssistantResponse({
       message: cleanInput,
       assistantMessageId: assistantMessage.id,
       requestAttachments: attachments,
-      requestComposerMode: composerMode,
+      requestComposerMode,
       requestSiteSearchMode: siteSearchMode,
       requestSites: siteSearchMode === "SPECIFIC" ? managedSites : [],
     });
@@ -753,7 +872,9 @@ function ChatPanelContent({
         {streaming ? (
           <div className="mx-auto mt-5 flex max-w-4xl items-center gap-2 text-sm font-bold text-cyan-200">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Nexus is thinking
+            {activeGeneration === "image"
+              ? "Nexus is generating an image"
+              : "Nexus is thinking"}
           </div>
         ) : null}
 
@@ -833,8 +954,14 @@ function ChatPanelContent({
                     <ComposerMenuButton
                       icon={<ImageIcon className="h-5 w-5" />}
                       label="Create image"
-                      detail="Coming soon"
-                      disabled
+                      detail={
+                        canGenerateImages
+                          ? `${imageCreditsPerGeneration} credits`
+                          : "Pro+"
+                      }
+                      active={composerMode === "IMAGE"}
+                      disabled={!canGenerateImages}
+                      onClick={() => setGuidedMode("IMAGE")}
                     />
                     <ComposerMenuButton
                       icon={<Brain className="h-5 w-5" />}
@@ -889,6 +1016,8 @@ function ChatPanelContent({
                     <Search className="h-4 w-4" />
                   ) : composerMode === "WEB_SEARCH" ? (
                     <Globe className="h-4 w-4" />
+                  ) : composerMode === "IMAGE" ? (
+                    <ImageIcon className="h-4 w-4" />
                   ) : (
                     <Brain className="h-4 w-4" />
                   )}
@@ -955,9 +1084,7 @@ function ChatPanelContent({
                   }
                 }}
                 placeholder={
-                  hasCredits
-                    ? "Ask, plan, debug, draft or explore..."
-                    : "You are out of credits..."
+                  composerPlaceholder
                 }
                 disabled={streaming || !hasCredits}
                 className="max-h-36 min-h-10 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm leading-6 text-white outline-none placeholder:text-slate-500 disabled:opacity-60 sm:max-h-44 sm:min-h-11 sm:py-3"
@@ -965,11 +1092,7 @@ function ChatPanelContent({
 
               <button
                 type="submit"
-                disabled={
-                  streaming ||
-                  (!input.trim() && attachments.length === 0) ||
-                  !hasCredits
-                }
+                disabled={!canSubmit}
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-slate-500 sm:h-11 sm:w-11"
                 aria-label="Send message"
               >

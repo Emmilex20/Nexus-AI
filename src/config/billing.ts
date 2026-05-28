@@ -9,10 +9,20 @@ export type PlanLimit = {
   monthlyCredits: number;
   allowedModelIds: AiModelId[];
   vscodeMonthlyRequests: number;
+  imageMonthlyGenerations: number;
   maxProjects: number;
   maxConversations: number;
   features: string[];
 };
+
+export const imageGenerationConfig = {
+  model: "gpt-image-1",
+  size: "1024x1024",
+  quality: "high",
+  outputFormat: "webp",
+  outputCompression: 90,
+  creditsPerImage: 160,
+} as const;
 
 export const planLimits: Record<Plan, PlanLimit> = {
   FREE: {
@@ -23,6 +33,7 @@ export const planLimits: Record<Plan, PlanLimit> = {
     monthlyCredits: 100,
     allowedModelIds: ["gpt-4o-mini"],
     vscodeMonthlyRequests: 0,
+    imageMonthlyGenerations: 0,
     maxProjects: 1,
     maxConversations: 10,
     features: [
@@ -31,6 +42,7 @@ export const planLimits: Record<Plan, PlanLimit> = {
       "10 saved conversations",
       "1 project",
       "Community support",
+      "Image generation starts on Pro",
       "VS Code integration not included",
     ],
   },
@@ -42,6 +54,7 @@ export const planLimits: Record<Plan, PlanLimit> = {
     monthlyCredits: 3000,
     allowedModelIds: ["gpt-4o-mini", "gpt-4.1-mini"],
     vscodeMonthlyRequests: 100,
+    imageMonthlyGenerations: 20,
     maxProjects: 10,
     maxConversations: 250,
     features: [
@@ -50,6 +63,7 @@ export const planLimits: Record<Plan, PlanLimit> = {
       "250 saved conversations",
       "10 projects",
       "Image-aware chat",
+      "20 OpenAI image generations/month",
       "VS Code assistant: 100 requests/month",
     ],
   },
@@ -61,6 +75,7 @@ export const planLimits: Record<Plan, PlanLimit> = {
     monthlyCredits: 10000,
     allowedModelIds: ["gpt-4o-mini", "gpt-4.1-mini"],
     vscodeMonthlyRequests: 400,
+    imageMonthlyGenerations: 80,
     maxProjects: 40,
     maxConversations: 1000,
     features: [
@@ -68,6 +83,7 @@ export const planLimits: Record<Plan, PlanLimit> = {
       "Higher chat and code limits",
       "1,000 saved conversations",
       "40 projects",
+      "80 OpenAI image generations/month",
       "Workspace-aware VS Code agent",
       "VS Code assistant: 400 requests/month",
     ],
@@ -80,6 +96,7 @@ export const planLimits: Record<Plan, PlanLimit> = {
     monthlyCredits: 35000,
     allowedModelIds: ["gpt-4o-mini", "gpt-4.1-mini"],
     vscodeMonthlyRequests: 1500,
+    imageMonthlyGenerations: 250,
     maxProjects: 150,
     maxConversations: 5000,
     features: [
@@ -87,6 +104,7 @@ export const planLimits: Record<Plan, PlanLimit> = {
       "5,000 saved conversations",
       "150 projects",
       "Fast and Builder models",
+      "250 shared OpenAI image generations/month",
       "Highest shared usage limits",
       "VS Code assistant: 1,500 requests/month",
     ],
@@ -126,6 +144,10 @@ export function getCreditPackage(packageId: string) {
 
 export function planHasVsCodeAccess(plan: Plan) {
   return planLimits[plan].vscodeMonthlyRequests > 0;
+}
+
+export function planHasImageGenerationAccess(plan: Plan) {
+  return planLimits[plan].imageMonthlyGenerations > 0;
 }
 
 export function planAllowsModel(plan: Plan, modelId: string) {

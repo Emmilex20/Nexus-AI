@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Check } from "lucide-react";
-import { planLimits } from "@/config/billing";
+import { imageGenerationConfig, planLimits } from "@/config/billing";
 import { Container } from "@/components/shared/container";
 import { SectionHeading } from "@/components/shared/section-heading";
 
@@ -49,6 +49,14 @@ export default function PricingPage() {
                 {plan.vscodeMonthlyRequests > 0
                   ? `${plan.vscodeMonthlyRequests.toLocaleString()} VS Code requests/month`
                   : "No VS Code integration"}
+              </p>
+              <p className="mt-1 text-sm text-slate-400">
+                {plan.imageMonthlyGenerations > 0
+                  ? `${plan.imageMonthlyGenerations.toLocaleString()} image generations/month`
+                  : "No image generation"}
+              </p>
+              <p className="mt-1 text-xs font-semibold text-slate-500">
+                Images use {imageGenerationConfig.creditsPerImage} credits each
               </p>
 
               <ul className="mt-8 space-y-4 text-sm text-slate-300">

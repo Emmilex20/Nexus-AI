@@ -59,31 +59,32 @@ enum AdminAuditAction {
 }
 
 model User {
-  id             String   @id @default(cuid())
-  clerkId        String   @unique
-  email          String   @unique
-  firstName      String?
-  lastName       String?
-  imageUrl       String?
-  plan           Plan     @default(FREE)
-  role           UserRole @default(USER)
-  credits        Int      @default(100)
-  isSuspended    Boolean  @default(false)
+  id               String    @id @default(cuid())
+  clerkId          String    @unique
+  email            String    @unique
+  firstName        String?
+  lastName         String?
+  imageUrl         String?
+  plan             Plan      @default(FREE)
+  role             UserRole  @default(USER)
+  credits          Int       @default(100)
+  isSuspended      Boolean   @default(false)
   suspensionReason String?
-  suspendedAt    DateTime?
-  onboardingDone Boolean  @default(false)
-  planStartedAt  DateTime?
-  planRenewsAt   DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  suspendedAt      DateTime?
+  onboardingDone   Boolean   @default(false)
+  planStartedAt    DateTime?
+  planRenewsAt     DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  projects      Project[]
-  conversations Conversation[]
-  messages      Message[]
-  usageLogs     UsageLog[]
-  payments      Payment[]
-  billingEvents BillingEvent[]
+  projects        Project[]
+  conversations   Conversation[]
+  messages        Message[]
+  usageLogs       UsageLog[]
+  payments        Payment[]
+  billingEvents   BillingEvent[]
   developerTokens DeveloperToken[]
+  generatedImages GeneratedImage[]
 
   @@index([clerkId])
   @@index([email])
@@ -115,9 +116,10 @@ model Conversation {
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project  Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  messages Message[]
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project         Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  messages        Message[]
+  generatedImages GeneratedImage[]
 
   @@index([userId])
   @@index([projectId])
@@ -134,12 +136,35 @@ model Message {
   userId         String
   createdAt      DateTime @default(now())
 
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation   Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generatedImage GeneratedImage?
 
   @@index([conversationId])
   @@index([userId])
   @@index([role])
+}
+
+model GeneratedImage {
+  id             String   @id @default(cuid())
+  userId         String
+  conversationId String
+  messageId      String?  @unique
+  prompt         String
+  revisedPrompt  String?
+  model          String
+  size           String
+  quality        String
+  outputFormat   String   @default("webp")
+  imageBase64    String   @db.Text
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  message      Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([conversationId])
 }
 
 model UsageLog {

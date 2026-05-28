@@ -48,3 +48,4 @@ export function BillingEventsTable({ events }: BillingEventsTableProps) {
     </section>
   );
 }
+

@@ -39,6 +39,7 @@ export default async function OpenGraphImage() {
             gap: 28,
           }}
         >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={logoSrc}
             alt=""

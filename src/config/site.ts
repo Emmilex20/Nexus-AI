@@ -4,11 +4,11 @@ const vercelAppUrl =
 const productionUrl = vercelAppUrl ? `https://${vercelAppUrl}` : undefined;
 const shouldIgnoreLocalUrl =
   process.env.NODE_ENV === "production" && configuredAppUrl?.includes("localhost");
-const siteUrl = (
+const resolvedSiteUrl =
   shouldIgnoreLocalUrl
-    ? productionUrl
-    : configuredAppUrl ?? productionUrl ?? "https://nexus-ai-jet-kappa.vercel.app"
-).replace(/\/$/, "");
+    ? productionUrl ?? "https://nexus-ai-jet-kappa.vercel.app"
+    : configuredAppUrl ?? productionUrl ?? "https://nexus-ai-jet-kappa.vercel.app";
+const siteUrl = resolvedSiteUrl.replace(/\/$/, "");
 
 export const siteConfig = {
   name: "Nexus AI",

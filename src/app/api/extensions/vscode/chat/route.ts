@@ -2,7 +2,12 @@ import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { selectRuntimeModel } from "@/config/ai-models";
+import {
+  aiModelIds,
+  getOpenAIRuntimeOptions,
+  legacyAiModelIds,
+  selectRuntimeModel,
+} from "@/config/ai-models";
 import {
   buildAssistantQualityPrompt,
   buildWorkspaceCapabilityPrompt,
@@ -16,6 +21,10 @@ import { buildWorkspaceContext } from "@/lib/workspace-context";
 
 export const maxDuration = 60;
 
+const vscodeModelSchema = z
+  .union([z.enum(aiModelIds), z.enum(legacyAiModelIds)])
+  .default("gpt-5.4");
+
 const vscodeChatSchema = z.object({
   prompt: z.string().min(1).max(4000),
   selectedText: z.string().max(20000).optional(),
@@ -23,7 +32,7 @@ const vscodeChatSchema = z.object({
   fileName: z.string().max(260).optional(),
   languageId: z.string().max(80).optional(),
   workspaceName: z.string().max(120).optional(),
-  model: z.enum(["gpt-4o-mini", "gpt-4.1-mini"]).default("gpt-4.1-mini"),
+  model: vscodeModelSchema,
 });
 
 export async function POST(req: Request) {
@@ -127,6 +136,13 @@ export async function POST(req: Request) {
 
   const result = await generateText({
     model: openai(selectedModel.id),
+    providerOptions: getOpenAIRuntimeOptions({
+      modelId: selectedModel.id,
+      mode: "CODE",
+      composerMode: "THINKING",
+      hasAttachments: false,
+      message: userMessage,
+    }),
     system: `
 You are Nexus AI inside VS Code.
 

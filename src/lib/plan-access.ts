@@ -1,5 +1,6 @@
 import type { Plan, User } from "@prisma/client";
 import {
+  getMinimumPlanForModel,
   planHasImageGenerationAccess,
   planAllowsModel,
   planHasVsCodeAccess,
@@ -21,7 +22,7 @@ export function getPlanModelAccessError(plan: Plan, modelId: string) {
 
   return {
     error: `${planLimits[plan].name} does not include this model.`,
-    requiredPlan: "PRO",
+    requiredPlan: getMinimumPlanForModel(modelId),
   };
 }
 

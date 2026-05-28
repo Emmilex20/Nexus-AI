@@ -2,7 +2,12 @@ import { openai } from "@ai-sdk/openai";
 import { generateObject, type UserContent } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { selectRuntimeModel } from "@/config/ai-models";
+import {
+  aiModelIds,
+  getOpenAIRuntimeOptions,
+  legacyAiModelIds,
+  selectRuntimeModel,
+} from "@/config/ai-models";
 import {
   buildAssistantQualityPrompt,
   buildWorkspaceCapabilityPrompt,
@@ -15,6 +20,10 @@ import { prisma } from "@/lib/prisma";
 import { buildWorkspaceContext } from "@/lib/workspace-context";
 
 export const maxDuration = 60;
+
+const vscodeModelSchema = z
+  .union([z.enum(aiModelIds), z.enum(legacyAiModelIds)])
+  .default("gpt-5.4");
 
 const vscodeFileSnapshotSchema = z.object({
   path: z.string().min(1).max(260),
@@ -41,7 +50,7 @@ const vscodeAgentRequestSchema = z.object({
   permissionMode: z
     .enum(["default", "auto-review", "full-access"])
     .default("default"),
-  model: z.enum(["gpt-4o-mini", "gpt-4.1-mini"]).default("gpt-4.1-mini"),
+  model: vscodeModelSchema,
 });
 
 const vscodeAgentChangeSchema = z.object({
@@ -249,6 +258,13 @@ export async function POST(req: Request) {
   try {
     const result = await generateObject({
       model: openai(selectedModel.id),
+      providerOptions: getOpenAIRuntimeOptions({
+        modelId: selectedModel.id,
+        mode: "CODE",
+        composerMode: "THINKING",
+        hasAttachments: parsed.data.attachments.length > 0,
+        message: userMessage,
+      }),
       schema: vscodeAgentResultSchema,
       system: `
 You are Nexus AI, a coding agent inside VS Code.

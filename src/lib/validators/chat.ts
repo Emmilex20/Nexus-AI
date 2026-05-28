@@ -1,4 +1,9 @@
 import { z } from "zod";
+import { aiModelIds, legacyAiModelIds } from "@/config/ai-models";
+
+const chatModelSchema = z
+  .union([z.enum(aiModelIds), z.enum(legacyAiModelIds)])
+  .default("gpt-5.4-mini");
 
 export const chatAttachmentSchema = z.object({
   id: z.string().min(1).max(100),
@@ -13,7 +18,7 @@ export const chatAttachmentSchema = z.object({
 export const chatRequestSchema = z.object({
   conversationId: z.string().min(1),
   message: z.string().min(1).max(8000),
-  model: z.enum(["gpt-4o-mini", "gpt-4.1-mini"]).default("gpt-4o-mini"),
+  model: chatModelSchema,
   composerMode: z
     .enum(["DEFAULT", "THINKING", "DEEP_RESEARCH", "WEB_SEARCH", "IMAGE"])
     .default("DEFAULT"),

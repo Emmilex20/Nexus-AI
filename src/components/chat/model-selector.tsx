@@ -1,6 +1,6 @@
 "use client";
 
-import { Cpu, Zap } from "lucide-react";
+import { Brain, Code2, Cpu, Sparkles, Zap } from "lucide-react";
 import { aiModels, type AiModelId } from "@/config/ai-models";
 import { cn } from "@/lib/utils";
 
@@ -13,8 +13,11 @@ type ModelSelectorProps = {
 
 const modelIcons = {
   "gpt-4o-mini": Zap,
-  "gpt-4.1-mini": Cpu,
-} as const;
+  "gpt-5.4-mini": Cpu,
+  "gpt-5.4": Brain,
+  "gpt-5.2-codex": Code2,
+  "gpt-5.5": Sparkles,
+} as const satisfies Record<AiModelId, typeof Zap>;
 
 export function ModelSelector({
   value,

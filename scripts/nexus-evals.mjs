@@ -52,27 +52,45 @@ function shouldSaveMemory(value) {
   ].some((pattern) => pattern.test(value));
 }
 
-function routeModel({ requestedModelId, allowedModelIds, mode, composerMode, message }) {
-  const complex =
+function routeModel({
+  requestedModelId,
+  allowedModelIds,
+  mode,
+  composerMode,
+  message,
+  hasAttachments = false,
+}) {
+  const isCode =
     mode === "CODE" ||
+    /\b(debug|fix|refactor|implement|code|component|function|schema|migration|api route|typescript|javascript|tsx|jsx|prisma|sql|vercel|build error|lint|test|repo|workspace)\b/i.test(
+      message
+    );
+  const isDeep =
     mode === "FILE" ||
     composerMode === "THINKING" ||
     composerMode === "DEEP_RESEARCH" ||
     composerMode === "WEB_SEARCH" ||
+    hasAttachments ||
     message.length > 900 ||
-    /\b(debug|fix|refactor|implement|architecture|schema|migration|api route|typescript|prisma|vercel|production|security|accuracy|analyze)\b/i.test(
+    /\b(architecture|security|production|accuracy|analyze|research|strategy|complex|deep|evaluate|compare|audit|review|scale|multi-step|agent)\b/i.test(
       message
     );
 
-  if (
-    requestedModelId === "gpt-4o-mini" &&
-    allowedModelIds.includes("gpt-4.1-mini") &&
-    complex
-  ) {
-    return "gpt-4.1-mini";
+  if (isCode && allowedModelIds.includes("gpt-5.2-codex")) {
+    return "gpt-5.2-codex";
   }
 
-  return requestedModelId;
+  if (isDeep) {
+    if (allowedModelIds.includes("gpt-5.5")) return "gpt-5.5";
+    if (allowedModelIds.includes("gpt-5.4")) return "gpt-5.4";
+    if (allowedModelIds.includes("gpt-5.4-mini")) return "gpt-5.4-mini";
+  }
+
+  if (allowedModelIds.includes(requestedModelId)) {
+    return requestedModelId;
+  }
+
+  return allowedModelIds[0];
 }
 
 check("image requests route to image generation", () => {
@@ -97,16 +115,26 @@ check("explicit memory requests are captured", () => {
   );
 });
 
-check("code and analysis route to builder when available", () => {
+check("code and analysis route to stronger task models when available", () => {
   assert(
     routeModel({
-      requestedModelId: "gpt-4o-mini",
-      allowedModelIds: ["gpt-4o-mini", "gpt-4.1-mini"],
+      requestedModelId: "gpt-5.4-mini",
+      allowedModelIds: ["gpt-5.4-mini", "gpt-5.4", "gpt-5.2-codex"],
       mode: "CODE",
       composerMode: "DEFAULT",
       message: "Fix this Prisma migration and verify the API route.",
-    }) === "gpt-4.1-mini",
-    "Expected coding task to route to Builder"
+    }) === "gpt-5.2-codex",
+    "Expected coding task to route to Codex"
+  );
+  assert(
+    routeModel({
+      requestedModelId: "gpt-5.4-mini",
+      allowedModelIds: ["gpt-5.4-mini", "gpt-5.4", "gpt-5.2-codex", "gpt-5.5"],
+      mode: "CHAT",
+      composerMode: "DEEP_RESEARCH",
+      message: "Analyze this product architecture deeply for production risk.",
+    }) === "gpt-5.5",
+    "Expected deep research task to route to Frontier"
   );
   assert(
     routeModel({
@@ -123,6 +151,7 @@ check("code and analysis route to builder when available", () => {
 check("quality prompts keep context and verification active", () => {
   const promptSource = readFileSync("src/config/assistant-quality.ts", "utf8");
   const chatRoute = readFileSync("src/app/api/chat/route.ts", "utf8");
+  const billingSource = readFileSync("src/config/billing.ts", "utf8");
 
   assert(
     promptSource.includes("Workspace memory") &&
@@ -134,6 +163,12 @@ check("quality prompts keep context and verification active", () => {
     chatRoute.includes("buildWorkspaceContext") &&
       chatRoute.includes("buildAssistantQualityPrompt"),
     "Expected chat route to inject retrieval and quality policy"
+  );
+  assert(
+    billingSource.includes("gpt-image-2") &&
+      billingSource.includes("gpt-5.2-codex") &&
+      billingSource.includes("gpt-5.5"),
+    "Expected billing config to expose current OpenAI task models"
   );
 });
 

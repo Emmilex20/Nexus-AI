@@ -2,6 +2,7 @@ import { openai } from "@ai-sdk/openai";
 import { streamText, type ModelMessage, type UserContent } from "ai";
 import { NextResponse } from "next/server";
 import {
+  getOpenAIRuntimeOptions,
   getModePrompt,
   selectRuntimeModel,
 } from "@/config/ai-models";
@@ -320,6 +321,13 @@ ${workspaceContext ? `Retrieved workspace context:\n${workspaceContext}` : ""}
 
   const result = streamText({
     model: openai(selectedModel.id),
+    providerOptions: getOpenAIRuntimeOptions({
+      modelId: selectedModel.id,
+      mode: conversation.mode,
+      composerMode,
+      hasAttachments: attachments.length > 0,
+      message: finalUserContent,
+    }),
     system: systemPrompt,
     messages: [
       ...history,

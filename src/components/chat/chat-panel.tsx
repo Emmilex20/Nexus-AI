@@ -189,7 +189,7 @@ function ChatPanelContent({
   );
   const safeSelectedModel = allowedModelIds.includes(selectedModel)
     ? selectedModel
-    : availableModels[0]?.id ?? "gpt-4o-mini";
+    : availableModels[0]?.id ?? aiModels[0].id;
   const [credits, setCredits] = useState(initialCredits);
   const [streaming, setStreaming] = useState(false);
   const [activeGeneration, setActiveGeneration] = useState<"text" | "image">(

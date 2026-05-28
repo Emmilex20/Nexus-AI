@@ -22,7 +22,7 @@ export function ChatPreferencesProvider({
 }: {
   children: ReactNode;
 }) {
-  const [selectedModel, setSelectedModel] = useState<AiModelId>("gpt-4o-mini");
+  const [selectedModel, setSelectedModel] = useState<AiModelId>("gpt-5.4-mini");
 
   const value = useMemo(
     () => ({

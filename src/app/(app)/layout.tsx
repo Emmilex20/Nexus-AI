@@ -1,7 +1,10 @@
+import { Suspense } from "react";
+import { ChatPreferencesProvider } from "@/components/chat/chat-preferences";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { MobileAppHeader } from "@/components/dashboard/mobile-app-header";
 import { SuspendedNotice } from "@/components/dashboard/suspended-notice";
 import { getCurrentDbUser } from "@/lib/current-user";
+import { prisma } from "@/lib/prisma";
 
 export default async function AppLayout({
   children,
@@ -18,15 +21,46 @@ export default async function AppLayout({
     );
   }
 
+  const recentConversations = user
+    ? await prisma.conversation.findMany({
+        where: {
+          userId: user.id,
+          archived: false,
+        },
+        orderBy: {
+          updatedAt: "desc",
+        },
+        take: 8,
+      })
+    : [];
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <AppSidebar />
-      <div className="lg:pl-72">
-        <MobileAppHeader />
-        <main className="min-h-screen px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
-          {children}
-        </main>
-      </div>
+      <ChatPreferencesProvider>
+        <Suspense fallback={null}>
+          <AppSidebar
+            conversations={recentConversations.map((conversation) => ({
+              id: conversation.id,
+              title: conversation.title,
+              mode: conversation.mode,
+              updatedAt: conversation.updatedAt.toISOString(),
+            }))}
+          />
+        </Suspense>
+        <div className="lg:pl-60">
+          <MobileAppHeader
+            conversations={recentConversations.map((conversation) => ({
+              id: conversation.id,
+              title: conversation.title,
+              mode: conversation.mode,
+              updatedAt: conversation.updatedAt.toISOString(),
+            }))}
+          />
+          <main className="min-h-screen px-4 py-6 sm:px-5 lg:px-5 lg:py-5">
+            {children}
+          </main>
+        </div>
+      </ChatPreferencesProvider>
     </div>
   );
 }

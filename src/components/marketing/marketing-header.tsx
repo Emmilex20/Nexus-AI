@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { UserButton, useAuth } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import { Menu, X } from "lucide-react";
 import { useState } from "react";
+import { MountedUserButton } from "@/components/auth/mounted-user-button";
 import { Logo } from "@/components/marketing/logo";
 import { Container } from "@/components/shared/container";
 import { siteConfig } from "@/config/site";
@@ -53,7 +54,7 @@ export function MarketingHeader() {
             >
               Dashboard
             </Link>
-            <UserButton />
+            <MountedUserButton />
             </>
           ) : null}
         </div>

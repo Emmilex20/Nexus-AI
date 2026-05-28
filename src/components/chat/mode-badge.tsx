@@ -8,7 +8,7 @@ export function ModeBadge({ mode }: ModeBadgeProps) {
   const currentMode = chatModes.find((item) => item.id === mode) ?? chatModes[0];
 
   return (
-    <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1.5 text-xs font-bold text-cyan-100">
+    <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-2.5 py-1 text-[11px] font-bold text-cyan-100">
       {currentMode.name} mode
     </span>
   );

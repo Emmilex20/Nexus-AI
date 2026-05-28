@@ -122,12 +122,12 @@ export default async function DashboardPage() {
               Dashboard
             </div>
 
-            <h1 className="mt-6 max-w-3xl text-balance text-4xl font-black tracking-tight text-white sm:text-6xl">
+            <h1 className="mt-5 max-w-3xl text-balance text-3xl font-black tracking-tight text-white sm:text-5xl">
               Welcome{user?.firstName ? `, ${user.firstName}` : ""}. What are we
               building today?
             </h1>
 
-            <p className="mt-5 max-w-2xl text-base leading-8 text-slate-300">
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300">
               Your workspace is organized around action: start a conversation,
               attach work to projects, revisit history and keep credits visible.
             </p>

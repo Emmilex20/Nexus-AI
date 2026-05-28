@@ -54,7 +54,7 @@ export function ConversationActions({ conversationId }: ConversationActionsProps
         type="button"
         onClick={archiveConversation}
         disabled={loading}
-        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-slate-300 transition hover:bg-white/10 hover:text-white disabled:opacity-60"
+        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 transition hover:bg-white/10 hover:text-white disabled:opacity-60"
       >
         <Archive className="h-4 w-4" />
         Archive
@@ -64,7 +64,7 @@ export function ConversationActions({ conversationId }: ConversationActionsProps
         type="button"
         onClick={deleteConversation}
         disabled={loading}
-        className="inline-flex items-center gap-2 rounded-full border border-red-400/20 bg-red-500/10 px-4 py-2 text-xs font-bold text-red-200 transition hover:bg-red-500/20 disabled:opacity-60"
+        className="inline-flex items-center gap-2 rounded-full border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 transition hover:bg-red-500/20 disabled:opacity-60"
       >
         <Trash2 className="h-4 w-4" />
         Delete

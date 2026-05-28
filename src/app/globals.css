@@ -24,7 +24,6 @@ body {
 }
 
 a {
-  color: inherit;
   text-decoration: none;
 }
 
@@ -57,6 +56,38 @@ select {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
+}
+
+.sidebar-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(34, 211, 238, 0.38) rgba(15, 23, 42, 0.3);
+}
+
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.3);
+  border-radius: 999px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    rgba(34, 211, 238, 0.55),
+    rgba(139, 92, 246, 0.5)
+  );
+  border: 2px solid #070a13;
+  border-radius: 999px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(103, 232, 249, 0.8),
+    rgba(167, 139, 250, 0.72)
+  );
 }
 
 .container-safe {

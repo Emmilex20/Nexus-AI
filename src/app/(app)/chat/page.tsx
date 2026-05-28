@@ -4,7 +4,6 @@ import {
   Brain,
   Code2,
   FileText,
-  MessageSquarePlus,
   Search,
   Sparkles,
 } from "lucide-react";
@@ -12,7 +11,6 @@ import { getCurrentDbUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { CreateConversationButton } from "@/components/chat/create-conversation-button";
 import { ChatPanel } from "@/components/chat/chat-panel";
-import { ConversationList } from "@/components/chat/conversation-list";
 
 type ChatPageProps = {
   searchParams: Promise<{
@@ -81,24 +79,8 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
       redirect("/chat");
     }
 
-    const conversations = await prisma.conversation.findMany({
-      where: {
-        userId: user.id,
-        archived: false,
-      },
-      orderBy: {
-        updatedAt: "desc",
-      },
-      take: 20,
-    });
-
     return (
-      <div className="mx-auto flex max-w-[100rem] gap-5">
-        <ConversationList
-          conversations={conversations}
-          activeConversationId={conversation.id}
-        />
-
+      <div className="-mx-4 -my-6 sm:-mx-5 lg:-m-5">
         <ChatPanel
           conversationId={conversation.id}
           conversationTitle={conversation.title}
@@ -110,109 +92,50 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
     );
   }
 
-  const recentConversations = await prisma.conversation.findMany({
-    where: {
-      userId: user.id,
-      archived: false,
-    },
-    orderBy: {
-      updatedAt: "desc",
-    },
-    take: 20,
-  });
-
   return (
-    <div className="mx-auto grid max-w-[100rem] gap-5 xl:grid-cols-[20rem_1fr]">
-      <ConversationList conversations={recentConversations} />
+    <div className="-mx-4 -my-6 flex min-h-[calc(100dvh-3.5rem)] items-center justify-center px-4 sm:-mx-5 lg:-m-5 lg:min-h-screen">
+      <section className="w-full max-w-3xl text-center">
+        <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-3xl bg-cyan-400/10 text-cyan-300 sm:h-14 sm:w-14">
+          <Sparkles className="h-6 w-6 sm:h-7 sm:w-7" />
+        </div>
 
-      <section className="min-h-[calc(100vh-5rem)] overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#0b1020]">
-        <div className="grid min-h-[calc(100vh-5rem)] lg:grid-cols-[1fr_0.95fr]">
-          <div className="flex flex-col justify-between border-b border-white/10 p-6 sm:p-8 lg:border-b-0 lg:border-r">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-200">
-                <Sparkles className="h-4 w-4" />
-                Nexus AI chat
-              </div>
+        <h1 className="text-balance text-2xl font-medium tracking-tight text-white sm:text-4xl">
+          Where should we begin?
+        </h1>
 
-              <h1 className="mt-7 max-w-3xl text-balance text-4xl font-black tracking-tight text-white sm:text-6xl">
-                Start a conversation that becomes workspace memory.
-              </h1>
+        <div className="mx-auto mt-6 max-w-2xl rounded-[1.5rem] bg-[#242424] p-2.5 text-left shadow-2xl shadow-black/30 ring-1 ring-white/10 sm:mt-8 sm:rounded-[1.75rem]">
+          <div className="min-h-16 px-3 py-3 text-base text-slate-400 sm:min-h-20 sm:px-4 sm:py-4 sm:text-lg">
+            Ask anything
+          </div>
+          <div className="flex flex-wrap items-center gap-2 px-2 pb-2">
+            <Suspense fallback={null}>
+              <CreateConversationButton
+                label="New conversation"
+                className="inline-flex h-10 items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 text-sm font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+              />
+            </Suspense>
+          </div>
+        </div>
 
-              <p className="mt-5 max-w-2xl text-base leading-8 text-slate-300">
-                Choose a mode, create a saved thread, and use Nexus like a
-                professional assistant for building, research, writing and
-                planning.
-              </p>
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <Suspense fallback={null}>
+            {starterMessages.map((item) => {
+              const Icon = item.icon;
 
-              <div className="mt-8">
-                <Suspense fallback={null}>
-                  <CreateConversationButton
-                    label="New conversation"
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
-                  />
-                </Suspense>
-              </div>
-            </div>
-
-            <div className="mt-10 grid gap-3 sm:grid-cols-3">
-              {[
-                "Markdown answers",
-                "Saved history",
-                "Credit aware",
-              ].map((item) => (
-                <div
-                  key={item}
-                  className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm font-bold text-slate-300"
+              return (
+                <CreateConversationButton
+                  key={item.label}
+                  title={item.title}
+                  mode={item.mode}
+                  label={item.label}
+                  className="group inline-flex items-center gap-2 rounded-full border border-white/10 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="p-6 sm:p-8">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-black text-white">
-                  Choose a launch mode
-                </h2>
-                <p className="mt-2 text-sm text-slate-400">
-                  Every option creates a real saved conversation.
-                </p>
-              </div>
-              <MessageSquarePlus className="h-6 w-6 text-slate-600" />
-            </div>
-
-            <div className="mt-6 grid gap-3">
-              <Suspense fallback={null}>
-                {starterMessages.map((item) => {
-                  const Icon = item.icon;
-
-                  return (
-                    <CreateConversationButton
-                      key={item.label}
-                      title={item.title}
-                      mode={item.mode}
-                      label={item.label}
-                      className="group flex w-full items-center gap-4 rounded-[1.35rem] border border-white/10 bg-white/[0.04] p-4 text-left transition hover:border-cyan-300/30 hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-300 transition group-hover:bg-cyan-400/15">
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <span className="min-w-0">
-                        <span className="block font-black text-white">
-                          {item.label}
-                        </span>
-                        <span className="mt-1 block text-sm leading-6 text-slate-400">
-                          {item.description}
-                        </span>
-                      </span>
-                    </CreateConversationButton>
-                  );
-                })}
-              </Suspense>
-            </div>
-          </div>
+                  <Icon className="h-5 w-5" />
+                  {item.label}
+                </CreateConversationButton>
+              );
+            })}
+          </Suspense>
         </div>
       </section>
     </div>

@@ -5,19 +5,18 @@ import type { FormEvent } from "react";
 import {
   ArrowUp,
   Bot,
-  Command,
   Loader2,
-  MessageSquareText,
   Sparkles,
   User,
   Wallet,
 } from "lucide-react";
 import { MessageContent } from "@/components/chat/message-content";
 import { CopyButton } from "@/components/chat/copy-button";
-import { ConversationActions } from "@/components/chat/conversation-actions";
-import { ModelSelector } from "@/components/chat/model-selector";
+import { ResponseActions } from "@/components/chat/response-actions";
+import { useChatPreferences } from "@/components/chat/chat-preferences";
 import { ModeBadge } from "@/components/chat/mode-badge";
-import type { AiModelId, ChatMode } from "@/config/ai-models";
+import { aiModels, type AiModelId } from "@/config/ai-models";
+import type { ChatMode } from "@/config/ai-models";
 
 type DbMessage = {
   id: string;
@@ -105,7 +104,7 @@ export function ChatPanel({
   );
 
   const [input, setInput] = useState("");
-  const [selectedModel, setSelectedModel] = useState<AiModelId>("gpt-4o-mini");
+  const { selectedModel, setSelectedModel } = useChatPreferences();
   const [credits, setCredits] = useState(initialCredits);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState("");
@@ -246,44 +245,43 @@ export function ChatPanel({
     }
   }
 
+  function retryFromMessage(messageIndex: number) {
+    if (streaming) return;
+
+    const previousUserMessage = messages
+      .slice(0, messageIndex)
+      .reverse()
+      .find((message) => message.role === "user");
+
+    if (!previousUserMessage) return;
+
+    setInput(previousUserMessage.content);
+    textareaRef.current?.focus();
+  }
+
   return (
-    <div className="flex h-[calc(100vh-5rem)] min-w-0 flex-1 flex-col overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#0b1020]">
-      <div className="border-b border-white/10 bg-white/[0.02] px-4 py-4 sm:px-6">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-300">
-              <Bot className="h-6 w-6" />
+    <div className="fixed inset-x-0 bottom-0 top-14 z-30 flex min-w-0 flex-col overflow-hidden bg-slate-950 lg:static lg:z-auto lg:h-screen lg:flex-1">
+      <div className="border-b border-white/10 bg-slate-950/95 px-3 py-2.5 backdrop-blur sm:px-6 sm:py-3">
+        <div className="flex items-center gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300 sm:h-9 sm:w-9">
+              <Bot className="h-4 w-4 sm:h-5 sm:w-5" />
             </div>
 
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-black tracking-tight text-white">
+              <h1 className="max-w-[11rem] truncate text-sm font-black tracking-tight text-white sm:max-w-none sm:text-lg">
                 {conversationTitle}
               </h1>
 
-              <div className="mt-2 flex flex-wrap items-center gap-2">
+              <div className="mt-1 flex flex-wrap items-center gap-2">
                 <ModeBadge mode={conversationMode} />
 
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-bold text-slate-300">
                   <Wallet className="h-3.5 w-3.5 text-emerald-300" />
                   {credits.toLocaleString()} credits
                 </span>
               </div>
             </div>
-          </div>
-
-          <ConversationActions conversationId={conversationId} />
-        </div>
-
-        <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <ModelSelector
-            value={selectedModel}
-            onChange={setSelectedModel}
-            disabled={streaming}
-          />
-
-          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/70 px-3 py-2 text-xs font-bold text-slate-400">
-            <Command className="h-4 w-4 text-cyan-300" />
-            Enter sends, Shift+Enter adds a line
           </div>
         </div>
       </div>
@@ -295,14 +293,14 @@ export function ChatPanel({
         </div>
       ) : null}
 
-      <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-6 sm:py-6">
         {messages.length === 0 ? (
-          <div className="mx-auto flex min-h-full max-w-3xl items-center justify-center text-center">
+          <div className="mx-auto flex min-h-full max-w-3xl items-center justify-center pb-20 text-center sm:pb-24">
             <div>
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-cyan-400/10 text-cyan-300">
-                <Sparkles className="h-8 w-8" />
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-3xl bg-cyan-400/10 text-cyan-300 sm:h-16 sm:w-16">
+                <Sparkles className="h-6 w-6 sm:h-8 sm:w-8" />
               </div>
-              <h2 className="mt-6 text-3xl font-black tracking-tight text-white sm:text-5xl">
+              <h2 className="mt-5 text-2xl font-black tracking-tight text-white sm:mt-6 sm:text-5xl">
                 Start with a sharp question.
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-sm leading-7 text-slate-400 sm:text-base">
@@ -325,21 +323,21 @@ export function ChatPanel({
             </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-4xl space-y-7">
-            {messages.map((message) => (
+          <div className="mx-auto max-w-4xl space-y-5 pb-24 pt-2 sm:space-y-8 sm:pb-28 sm:pt-4">
+            {messages.map((message, index) => (
               <div
                 key={message.id}
                 className={
                   message.role === "user"
                     ? "flex justify-end"
-                    : "flex justify-start"
+                    : "flex flex-col items-start"
                 }
               >
                 <div
                   className={
                     message.role === "user"
-                      ? "max-w-[88%] rounded-[1.35rem] bg-white px-5 py-4 text-sm leading-7 text-slate-950 shadow-lg shadow-black/10 sm:max-w-[72%]"
-                      : "max-w-[92%] rounded-[1.35rem] border border-white/10 bg-slate-950/70 px-5 py-4 text-sm leading-7 text-slate-100 sm:max-w-[82%]"
+                      ? "max-w-[86%] rounded-[1.25rem] bg-white px-4 py-3 text-sm leading-7 text-slate-950 shadow-lg shadow-black/10 sm:max-w-[70%] sm:rounded-[1.35rem] sm:px-5 sm:py-4"
+                      : "max-w-[92%] rounded-[1.25rem] bg-[#262626] px-4 py-3 text-sm leading-7 text-slate-100 sm:max-w-[78%] sm:rounded-[1.35rem] sm:px-5 sm:py-4"
                   }
                 >
                   <div className="mb-3 flex items-center justify-between gap-3">
@@ -352,7 +350,9 @@ export function ChatPanel({
                       {message.role === "user" ? "You" : "Nexus AI"}
                     </div>
 
-                    {message.content ? <CopyButton text={message.content} /> : null}
+                    {message.role === "user" && message.content ? (
+                      <CopyButton text={message.content} />
+                    ) : null}
                   </div>
 
                   {message.role === "assistant" ? (
@@ -361,6 +361,13 @@ export function ChatPanel({
                     <div className="whitespace-pre-wrap">{message.content}</div>
                   )}
                 </div>
+
+                {message.role === "assistant" && message.content ? (
+                  <ResponseActions
+                    text={message.content}
+                    onRetry={() => retryFromMessage(index)}
+                  />
+                ) : null}
               </div>
             ))}
           </div>
@@ -384,42 +391,61 @@ export function ChatPanel({
 
       <form
         onSubmit={handleSubmit}
-        className="border-t border-white/10 bg-[#070a13]/95 px-3 py-3 backdrop-blur-xl sm:px-5 sm:py-4"
+        className="shrink-0 border-t border-white/10 bg-slate-950/95 px-2.5 pb-3 pt-2 backdrop-blur-xl sm:px-5 sm:pb-4"
       >
-        <div className="mx-auto max-w-4xl rounded-[1.5rem] border border-white/10 bg-white/[0.05] p-2 shadow-2xl shadow-black/20">
-          <div className="flex items-end gap-2">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-300">
-              <MessageSquareText className="h-5 w-5" />
+        <div className="mx-auto max-w-3xl rounded-[1.35rem] bg-[#242424] p-2 shadow-2xl shadow-black/30 ring-1 ring-white/10 sm:rounded-[1.5rem]">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="relative w-fit shrink-0">
+              <select
+                value={selectedModel}
+                onChange={(event) =>
+                  setSelectedModel(event.target.value as AiModelId)
+                }
+                disabled={streaming}
+                aria-label="Choose assistant model"
+                className="h-8 appearance-none rounded-xl border border-white/10 bg-white/[0.06] pl-3 pr-8 text-[11px] font-black text-white outline-none transition hover:bg-white/[0.09] disabled:cursor-not-allowed disabled:opacity-60 sm:h-11 sm:rounded-2xl sm:pl-3.5 sm:pr-9 sm:text-xs"
+              >
+                {aiModels.map((model) => (
+                  <option key={model.id} value={model.id} className="bg-[#242424]">
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 sm:text-xs">
+                v
+              </span>
             </div>
 
-            <textarea
-              ref={textareaRef}
-              rows={1}
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void handleSubmit();
+            <div className="flex min-w-0 flex-1 items-end gap-2">
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void handleSubmit();
+                  }
+                }}
+                placeholder={
+                  hasCredits
+                    ? "Ask, plan, debug, draft or explore..."
+                    : "You are out of credits..."
                 }
-              }}
-              placeholder={
-                hasCredits
-                  ? "Ask, plan, debug, draft or explore..."
-                  : "You are out of credits..."
-              }
-              disabled={streaming || !hasCredits}
-              className="max-h-44 min-h-11 flex-1 resize-none bg-transparent px-2 py-3 text-sm leading-6 text-white outline-none placeholder:text-slate-500 disabled:opacity-60"
-            />
+                disabled={streaming || !hasCredits}
+                className="max-h-36 min-h-10 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm leading-6 text-white outline-none placeholder:text-slate-500 disabled:opacity-60 sm:max-h-44 sm:min-h-11 sm:py-3"
+              />
 
-            <button
-              type="submit"
-              disabled={streaming || !input.trim() || !hasCredits}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-slate-500"
-              aria-label="Send message"
-            >
-              <ArrowUp className="h-5 w-5" />
-            </button>
+              <button
+                type="submit"
+                disabled={streaming || !input.trim() || !hasCredits}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-slate-500 sm:h-11 sm:w-11"
+                aria-label="Send message"
+              >
+                <ArrowUp className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         </div>
       </form>

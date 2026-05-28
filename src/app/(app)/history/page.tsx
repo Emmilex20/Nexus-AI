@@ -47,14 +47,14 @@ export default async function HistoryPage() {
             <Link
               key={conversation.id}
               href={`/chat?conversationId=${conversation.id}`}
-              className="block rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 transition hover:border-violet-400/40 hover:bg-white/[0.07]"
+              className="block rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-5 transition hover:border-cyan-400/40 hover:bg-white/[0.07]"
             >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/15 text-violet-300">
-                      <History className="h-6 w-6" />
-                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-cyan-500/15 text-cyan-300">
+                        <History className="h-5 w-5" />
+                      </div>
 
                     <div>
                       <h2 className="text-lg font-black text-white">
@@ -69,7 +69,7 @@ export default async function HistoryPage() {
                     </div>
                   </div>
 
-                  <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-400">
+                  <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
                     {conversation.messages[0]?.content ??
                       "No messages yet. Open this conversation to continue."}
                   </p>

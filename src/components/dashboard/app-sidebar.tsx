@@ -1,25 +1,49 @@
 "use client";
 
 import Link from "next/link";
-import { UserButton } from "@clerk/nextjs";
-import { usePathname } from "next/navigation";
-import { ArrowRight, MessageSquarePlus, Sparkles } from "lucide-react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import {
+  ArrowRight,
+  Eye,
+  EyeOff,
+  MessageSquarePlus,
+  Sparkles,
+} from "lucide-react";
+import { MountedUserButton } from "@/components/auth/mounted-user-button";
+import { RecentChatItem } from "@/components/dashboard/recent-chat-item";
 import { appNavItems } from "@/config/app-nav";
 import { cn } from "@/lib/utils";
 
-export function AppSidebar() {
+type SidebarConversation = {
+  id: string;
+  title: string;
+  mode: string;
+  updatedAt: string;
+};
+
+type AppSidebarProps = {
+  conversations?: SidebarConversation[];
+};
+
+export function AppSidebar({ conversations = [] }: AppSidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeConversationId = searchParams.get("conversationId");
+  const [showRecentChats, setShowRecentChats] = useState(true);
 
   return (
-    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-72 border-r border-white/10 bg-[#070a13]/95 p-5 lg:block">
-      <Link href="/dashboard" className="flex items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 via-violet-500 to-fuchsia-500 shadow-lg shadow-cyan-500/20">
-          <Sparkles className="h-5 w-5 text-white" />
+    <aside className="sidebar-scrollbar fixed left-0 top-0 z-40 hidden h-screen w-60 flex-col overflow-y-auto border-r border-white/10 bg-[#070a13]/95 p-3.5 lg:flex">
+      <Link href="/dashboard" className="flex items-center gap-2.5 px-1">
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 via-violet-500 to-fuchsia-500 shadow-lg shadow-cyan-500/20">
+          <Sparkles className="h-4 w-4 text-white" />
         </div>
 
-        <div>
-          <p className="text-base font-black tracking-tight text-white">Nexus AI</p>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-black tracking-tight text-white">
+            Nexus AI
+          </p>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
             Workspace
           </p>
         </div>
@@ -27,26 +51,27 @@ export function AppSidebar() {
 
       <Link
         href="/chat"
-        className="mt-8 flex items-center justify-between rounded-[1.25rem] border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm font-black text-cyan-100 transition hover:bg-cyan-400/15"
+        className="mt-5 flex items-center justify-between rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-3.5 py-2.5 text-xs font-black text-cyan-100 transition hover:bg-cyan-400/15"
       >
-        <span className="inline-flex items-center gap-3">
-          <MessageSquarePlus className="h-5 w-5" />
+        <span className="inline-flex items-center gap-2.5">
+          <MessageSquarePlus className="h-4 w-4" />
           New chat
         </span>
         <ArrowRight className="h-4 w-4" />
       </Link>
 
-      <nav className="mt-8 space-y-1.5">
+      <nav className="mt-5 space-y-1">
         {appNavItems.map((item) => {
           const Icon = item.icon;
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const active =
+            pathname === item.href || pathname.startsWith(`${item.href}/`);
 
           return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "group flex items-center gap-3 rounded-[1.15rem] px-4 py-3 text-sm font-bold transition",
+                "group flex h-10 items-center gap-3 rounded-2xl px-3 text-xs font-black transition",
                 active
                   ? "bg-white text-slate-950 shadow-lg shadow-white/5"
                   : "text-slate-400 hover:bg-white/[0.06] hover:text-white"
@@ -54,8 +79,10 @@ export function AppSidebar() {
             >
               <Icon
                 className={cn(
-                  "h-5 w-5",
-                  active ? "text-slate-950" : "text-slate-500 group-hover:text-white"
+                  "h-4 w-4",
+                  active
+                    ? "text-slate-950"
+                    : "text-slate-500 group-hover:text-white"
                 )}
               />
               {item.label}
@@ -64,24 +91,60 @@ export function AppSidebar() {
         })}
       </nav>
 
-      <div className="absolute bottom-5 left-5 right-5 space-y-3">
-        <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
-            Flow
-          </p>
-          <div className="mt-3 space-y-2 text-sm text-slate-300">
-            <p>Ask AI</p>
-            <p>Save chats</p>
-            <p>Track credits</p>
+      <section
+        className={cn(
+          "mt-4 rounded-2xl border border-white/10 bg-white/[0.025]",
+          !showRecentChats && "shrink-0"
+        )}
+      >
+        <div className="flex items-center justify-between border-b border-white/10 px-3.5 py-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+              Recent chats
+            </p>
+            <p className="mt-1 text-xs text-slate-400">Saved assistant work</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowRecentChats((value) => !value)}
+            className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white"
+            aria-label={showRecentChats ? "Hide recent chats" : "Show recent chats"}
+            title={showRecentChats ? "Hide recent chats" : "Show recent chats"}
+          >
+            {showRecentChats ? (
+              <EyeOff className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
+          </button>
         </div>
 
-        <div className="flex items-center gap-3 rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4">
-          <UserButton />
-          <div>
-            <p className="text-sm font-bold text-white">Account</p>
-            <p className="text-xs text-slate-500">Manage profile</p>
+        {showRecentChats ? (
+          <div className="space-y-1.5 p-2">
+            {conversations.length > 0 ? (
+              conversations.map((conversation) => (
+                <RecentChatItem
+                  key={conversation.id}
+                  conversation={conversation}
+                  active={conversation.id === activeConversationId}
+                />
+              ))
+            ) : (
+              <div className="rounded-xl border border-dashed border-white/10 p-3 text-xs leading-5 text-slate-500">
+                New conversations will appear here.
+              </div>
+            )}
           </div>
+        ) : null}
+      </section>
+
+      <div className="min-h-3 flex-1" />
+
+      <div className="mt-3 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+        <MountedUserButton />
+        <div className="min-w-0">
+          <p className="truncate text-xs font-black text-white">Account</p>
+          <p className="text-[11px] text-slate-500">Manage profile</p>
         </div>
       </div>
     </aside>

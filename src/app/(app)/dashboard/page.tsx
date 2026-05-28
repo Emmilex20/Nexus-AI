@@ -15,6 +15,7 @@ import {
 import { getCurrentDbUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { formatDate } from "@/lib/format";
+import { CreateConversationButton } from "@/components/chat/create-conversation-button";
 
 const actions = [
   {
@@ -133,13 +134,12 @@ export default async function DashboardPage() {
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link
-                href="/chat"
+              <CreateConversationButton
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-200"
               >
                 Start with Nexus AI
                 <ArrowRight className="h-5 w-5" />
-              </Link>
+              </CreateConversationButton>
 
               <Link
                 href="/projects"

@@ -2,7 +2,7 @@
   "name": "nexus-ai-vscode",
   "displayName": "Nexus AI",
   "description": "Nexus AI coding assistant for VS Code workspaces.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "nexus-ai",
   "license": "UNLICENSED",
   "engines": {

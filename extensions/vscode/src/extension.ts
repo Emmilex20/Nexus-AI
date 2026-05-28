@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 
 const TOKEN_SECRET_KEY = "nexusAi.developerToken";
 const LAST_WELCOME_VERSION_KEY = "nexusAi.lastWelcomeVersion";
-const EXTENSION_VERSION = "0.2.0";
+const EXTENSION_VERSION = "0.2.1";
 const DEFAULT_MODEL = "gpt-4.1-mini";
 const PRODUCTION_API_URL = "https://nexus-ai-jet-kappa.vercel.app";
 const LOCAL_API_URL = "http://localhost:3000";
@@ -683,11 +683,11 @@ async function testApiConnection(output: vscode.OutputChannel) {
         Accept: "application/json",
       },
     });
-    const data = (await res.json().catch(() => ({}))) as {
+    const data = await readJsonResponse<{
       ok?: boolean;
       name?: string;
       error?: string;
-    };
+    }>(res, healthUrl);
 
     if (!res.ok || !data.ok) {
       throw new Error(data.error || `API returned ${res.status}`);
@@ -848,10 +848,17 @@ async function askNexus(
           body: JSON.stringify(payload),
         });
 
-        const data = (await res.json()) as NexusChatResponse;
+        const data = await readJsonResponse<NexusChatResponse>(res, endpoint);
 
-        if (!res.ok || !data.answer) {
-          throw new Error(data.error || "Nexus AI request failed");
+  if (!res.ok || !data.answer) {
+    throw new Error(
+      data.error ||
+        getApiResponseErrorMessage(
+          res.status,
+          endpoint,
+          "The chat endpoint did not return an answer."
+        )
+    );
         }
 
         showAnswerPanel(data.answer, {
@@ -888,13 +895,82 @@ async function requestNexusAgent(
     body: JSON.stringify(payload),
   });
 
-  const data = (await res.json()) as NexusAgentResponse;
+  const data = await readJsonResponse<NexusAgentResponse>(res, endpoint);
 
   if (!res.ok || !data.answer) {
-    throw new Error(data.error || "Nexus AI agent request failed");
+    throw new Error(
+      data.error ||
+        getApiResponseErrorMessage(
+          res.status,
+          endpoint,
+          "The agent endpoint did not return an answer."
+        )
+    );
   }
 
   return data;
+}
+
+async function readJsonResponse<T>(res: Response, endpoint: string) {
+  const text = await res.text();
+
+  if (!text.trim()) {
+    throw new Error(
+      getApiResponseErrorMessage(
+        res.status,
+        endpoint,
+        "The API returned an empty response."
+      )
+    );
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(
+      getApiResponseErrorMessage(
+        res.status,
+        endpoint,
+        `The API returned ${describeResponseText(text)} instead of JSON.`
+      )
+    );
+  }
+}
+
+function getApiResponseErrorMessage(
+  status: number,
+  endpoint: string,
+  detail: string
+) {
+  const apiUrl = getApiUrl();
+  const isAgentEndpoint = endpoint.includes("/api/extensions/vscode/agent");
+  const isChatEndpoint = endpoint.includes("/api/extensions/vscode/chat");
+  const isVsCodeEndpoint = isAgentEndpoint || isChatEndpoint;
+  const setupHint = isLocalApiUrl(apiUrl)
+    ? `Make sure the Nexus AI dev server is running at ${apiUrl}.`
+    : isAgentEndpoint
+      ? "The deployed Nexus AI app likely does not have the new VS Code agent endpoint yet. Deploy the latest code, or set the extension API URL to http://localhost:3000 while running pnpm dev."
+      : "Check that the deployed Nexus AI app is up to date and that the API URL is correct.";
+
+  return [
+    `Nexus AI API returned ${status || "an invalid response"}.`,
+    detail,
+    isVsCodeEndpoint ? setupHint : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function describeResponseText(text: string) {
+  const trimmed = text.trim();
+
+  if (trimmed.startsWith("<!doctype") || trimmed.startsWith("<html")) {
+    return "an HTML page";
+  }
+
+  return trimmed.length > 80
+    ? `non-JSON text: ${trimmed.slice(0, 80)}...`
+    : `non-JSON text: ${trimmed}`;
 }
 
 function formatAgentMetadata(data: NexusAgentResponse) {

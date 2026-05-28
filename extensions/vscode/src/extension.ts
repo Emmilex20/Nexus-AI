@@ -3,7 +3,7 @@ import * as vscode from "vscode";
 const TOKEN_SECRET_KEY = "nexusAi.developerToken";
 const LAST_WELCOME_VERSION_KEY = "nexusAi.lastWelcomeVersion";
 const CONVERSATIONS_STATE_KEY = "nexusAi.conversations";
-const EXTENSION_VERSION = "0.3.1";
+const EXTENSION_VERSION = "0.3.2";
 const DEFAULT_MODEL = "gpt-4.1-mini";
 const PRODUCTION_API_URL = "https://nexus-ai-jet-kappa.vercel.app";
 const LOCAL_API_URL = "http://localhost:3000";
@@ -814,8 +814,7 @@ async function connectNexus(
 
   const action = await vscode.window.showInformationMessage(
     "Finish connecting Nexus AI in your browser. VS Code will capture the token automatically.",
-    "Change API URL",
-    "Paste Token Manually"
+    "Change API URL"
   );
 
   if (action === "Change API URL") {
@@ -823,10 +822,6 @@ async function connectNexus(
     assistantView?.refresh();
   }
 
-  if (action === "Paste Token Manually") {
-    await setDeveloperToken(context);
-    assistantView?.refresh();
-  }
 }
 
 async function setApiUrl() {

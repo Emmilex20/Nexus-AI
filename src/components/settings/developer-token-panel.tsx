@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Code2, Copy, KeyRound, Loader2, Trash2 } from "lucide-react";
+import { Code2, KeyRound, Loader2, Trash2 } from "lucide-react";
 import { formatDate } from "@/lib/format";
 
 type DeveloperToken = {
@@ -16,10 +16,8 @@ type DeveloperToken = {
 export function DeveloperTokenPanel() {
   const [tokens, setTokens] = useState<DeveloperToken[]>([]);
   const [name, setName] = useState("VS Code");
-  const [newToken, setNewToken] = useState("");
-  const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -55,43 +53,16 @@ export function DeveloperTokenPanel() {
     };
   }, []);
 
-  async function createToken() {
-    setCreating(true);
+  function connectVsCode() {
+    setConnecting(true);
     setError("");
-    setNewToken("");
 
-    try {
-      const res = await fetch("/api/developer-tokens", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name,
-        }),
-      });
-      const data = await res.json();
+    const params = new URLSearchParams({
+      name,
+      redirect: "vscode://nexus-ai.nexus-ai-vscode/connect",
+    });
 
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to create developer token");
-      }
-
-      setNewToken(data.token);
-      setTokens((current) => [data.developerToken, ...current]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  async function copyToken() {
-    await navigator.clipboard.writeText(newToken);
-    setCopied(true);
-
-    window.setTimeout(() => {
-      setCopied(false);
-    }, 1500);
+    window.location.assign(`/api/developer-tokens/vscode-callback?${params}`);
   }
 
   async function revokeToken(tokenId: string) {
@@ -126,8 +97,8 @@ export function DeveloperTokenPanel() {
           </div>
           <h2 className="text-2xl font-black text-white">Developer tokens</h2>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-400">
-            Connect Nexus AI to VS Code. Tokens are shown once, stored securely
-            by the extension, and can be revoked here anytime.
+            Connect Nexus AI to VS Code without copying tokens. The browser opens
+            VS Code, and the extension stores the developer token securely.
           </p>
         </div>
 
@@ -142,40 +113,23 @@ export function DeveloperTokenPanel() {
           />
           <button
             type="button"
-            onClick={createToken}
-            disabled={creating || name.trim().length < 2}
+            onClick={connectVsCode}
+            disabled={connecting || name.trim().length < 2}
             className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {creating ? (
+            {connecting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <KeyRound className="h-4 w-4" />
             )}
-            Create VS Code token
+            {connecting ? "Opening VS Code..." : "Connect VS Code"}
           </button>
+          <p className="mt-3 text-xs leading-5 text-slate-500">
+            Approve the browser prompt to open VS Code. No manual copy or paste is
+            needed.
+          </p>
         </div>
       </div>
-
-      {newToken ? (
-        <div className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4">
-          <p className="text-sm font-bold text-emerald-100">
-            Copy this token now. You will not be able to see it again.
-          </p>
-          <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-            <code className="min-w-0 flex-1 overflow-x-auto rounded-2xl bg-slate-950 px-4 py-3 text-xs text-emerald-200">
-              {newToken}
-            </code>
-            <button
-              type="button"
-              onClick={copyToken}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-200"
-            >
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied ? "Copied" : "Copy token"}
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {error ? (
         <div className="mt-5 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">

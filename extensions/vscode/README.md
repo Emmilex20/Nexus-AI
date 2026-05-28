@@ -24,7 +24,7 @@ Code. After install, reload VS Code if the commands do not appear immediately.
 4. Approve the browser prompt to open VS Code.
 
 VS Code stores the developer token automatically. If the browser callback does
-not open VS Code, run `Nexus AI: Set Developer Token` and paste a token manually.
+not open VS Code, return to Nexus AI settings and click `Connect VS Code` again.
 
 ## API URL
 
@@ -55,7 +55,6 @@ Run `Nexus AI: Test API Connection` to verify the URL.
 - `Nexus AI: Refresh Workspace`
 - `Nexus AI: Set API URL`
 - `Nexus AI: Test API Connection`
-- `Nexus AI: Set Developer Token`
 
 ## Coding assistant workflow
 

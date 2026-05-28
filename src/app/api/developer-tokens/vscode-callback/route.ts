@@ -5,18 +5,97 @@ import { prisma } from "@/lib/prisma";
 
 const VSCODE_REDIRECT_PREFIX = "vscode://nexus-ai.nexus-ai-vscode/connect";
 
+function isValidVsCodeRedirect(value: string) {
+  try {
+    const url = new URL(value);
+
+    return (
+      url.protocol === "vscode:" &&
+      url.hostname === "nexus-ai.nexus-ai-vscode" &&
+      url.pathname === "/connect"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function vscodeConnectHtml(callbackUrl: string) {
+  return `<!doctype html>
+<html>
+  <head>
+    <title>Nexus AI</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        align-items: center;
+        background: #070a18;
+        color: white;
+        display: flex;
+        font-family: system-ui, sans-serif;
+        justify-content: center;
+        margin: 0;
+        min-height: 100vh;
+        padding: 24px;
+      }
+      main {
+        border: 1px solid rgba(255,255,255,.12);
+        border-radius: 24px;
+        max-width: 560px;
+        padding: 32px;
+      }
+      p { color: #94a3b8; line-height: 1.7; }
+      a {
+        background: white;
+        border-radius: 999px;
+        color: #020617;
+        display: inline-flex;
+        font-weight: 800;
+        margin-top: 12px;
+        padding: 12px 18px;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Opening VS Code...</h1>
+      <p>Your Nexus AI developer token was created and will be stored securely by the VS Code extension. Approve the browser prompt to finish connecting.</p>
+      <a href="${escapeHtml(callbackUrl)}">Open VS Code</a>
+    </main>
+    <script>
+      window.setTimeout(() => {
+        window.location.href = ${JSON.stringify(callbackUrl)};
+      }, 250);
+    </script>
+  </body>
+</html>`;
+}
+
 export async function GET(req: Request) {
   const user = await getCurrentDbUser();
+  const url = new URL(req.url);
 
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const signInUrl = new URL("/sign-in", url.origin);
+
+    signInUrl.searchParams.set("redirect_url", `${url.pathname}${url.search}`);
+
+    return NextResponse.redirect(signInUrl);
   }
 
-  const url = new URL(req.url);
-  const redirect = url.searchParams.get("redirect") ?? "";
+  const redirect = url.searchParams.get("redirect") ?? VSCODE_REDIRECT_PREFIX;
   const name = url.searchParams.get("name") || "VS Code";
 
-  if (!redirect.startsWith(VSCODE_REDIRECT_PREFIX)) {
+  if (!isValidVsCodeRedirect(redirect)) {
     return NextResponse.json({ error: "Invalid redirect URI" }, { status: 400 });
   }
 
@@ -76,5 +155,9 @@ export async function GET(req: Request) {
   callbackUrl.searchParams.set("token", token);
   callbackUrl.searchParams.set("apiUrl", url.origin);
 
-  return NextResponse.redirect(callbackUrl);
+  return new NextResponse(vscodeConnectHtml(callbackUrl.toString()), {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+    },
+  });
 }

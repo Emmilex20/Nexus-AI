@@ -28,7 +28,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const { conversationId, prompt, size, quality } = parsed.data;
+  const { conversationId, prompt, size, quality, referenceImages } =
+    parsed.data;
 
   try {
     const result = await generateConversationImage({
@@ -37,6 +38,7 @@ export async function POST(req: Request) {
       prompt,
       size,
       quality,
+      referenceImages,
     });
 
     return NextResponse.json({

@@ -77,10 +77,22 @@ export async function POST(req: Request) {
 
   if (
     !retry &&
-    attachments.length === 0 &&
     (composerMode === "IMAGE" ||
       (composerMode === "DEFAULT" && looksLikeImageGenerationPrompt(message)))
   ) {
+    const referenceImages = attachments
+      .filter(
+        (attachment) => attachment.kind === "image" && attachment.dataUrl
+      )
+      .map((attachment) => ({
+        id: attachment.id,
+        name: attachment.name,
+        type: attachment.type,
+        size: attachment.size,
+        kind: "image" as const,
+        dataUrl: attachment.dataUrl ?? "",
+      }));
+
     try {
       const result = await generateConversationImage({
         user,
@@ -88,6 +100,7 @@ export async function POST(req: Request) {
         prompt: message,
         size: imageGenerationConfig.size,
         quality: imageGenerationConfig.quality,
+        referenceImages,
       });
 
       return new Response(

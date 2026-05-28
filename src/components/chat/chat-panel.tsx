@@ -252,7 +252,7 @@ function ChatPanelContent({
   const composerPlaceholder = !hasCredits
     ? "You are out of credits..."
     : composerMode === "IMAGE"
-      ? `Describe the image to generate (${imageCreditsPerGeneration} credits)...`
+      ? `Describe the image or edit. Attached images are used as references (${imageCreditsPerGeneration} credits)...`
       : imagePromptDetected
         ? `Press send to generate this image (${imageCreditsPerGeneration} credits)`
       : "Ask, plan, debug, draft or explore...";
@@ -497,9 +497,11 @@ function ChatPanelContent({
   async function generateImageResponse({
     prompt,
     assistantMessageId,
+    referenceImages = [],
   }: {
     prompt: string;
     assistantMessageId: string;
+    referenceImages?: ComposerAttachment[];
   }) {
     setError("");
     setStreaming(true);
@@ -516,6 +518,7 @@ function ChatPanelContent({
           prompt,
           size: imageGenerationConfig.size,
           quality: imageGenerationConfig.quality,
+          referenceImages,
         }),
       });
 
@@ -574,6 +577,10 @@ function ChatPanelContent({
         : "");
 
     if (!cleanInput || streaming || !hasCredits) return;
+    const requestAttachments = attachments;
+    const referenceImages = requestAttachments.filter(
+      (attachment) => attachment.kind === "image" && attachment.dataUrl
+    );
 
     if (requestComposerMode === "IMAGE") {
       if (!canGenerateImages) {
@@ -602,7 +609,7 @@ function ChatPanelContent({
       id: crypto.randomUUID(),
       role: "user",
       content: cleanInput,
-      attachments,
+      attachments: requestAttachments,
     };
 
     const assistantMessage: UiMessage = {
@@ -619,6 +626,7 @@ function ChatPanelContent({
       await generateImageResponse({
         prompt: cleanInput,
         assistantMessageId: assistantMessage.id,
+        referenceImages,
       });
       return;
     }
@@ -626,7 +634,7 @@ function ChatPanelContent({
     await streamAssistantResponse({
       message: cleanInput,
       assistantMessageId: assistantMessage.id,
-      requestAttachments: attachments,
+      requestAttachments,
       requestComposerMode,
       requestSiteSearchMode: siteSearchMode,
       requestSites: siteSearchMode === "SPECIFIC" ? managedSites : [],

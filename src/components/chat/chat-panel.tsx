@@ -245,7 +245,6 @@ function ChatPanelContent({
 
   useEffect(() => {
     shouldFollowStreamRef.current = true;
-    setShowScrollToBottom(false);
 
     const frame = window.requestAnimationFrame(() => {
       bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });

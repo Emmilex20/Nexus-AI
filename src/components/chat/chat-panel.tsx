@@ -111,6 +111,30 @@ const composerModeLabels: Record<ComposerMode, string> = {
   IMAGE: "Image",
 };
 
+function looksLikeImageGenerationPrompt(value: string) {
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, " ");
+
+  if (!normalized) return false;
+
+  const asksForPromptOnly =
+    /^(please\s+)?(can you\s+|could you\s+|would you\s+)?(generate|create|make|write)\s+(me\s+)?(an?\s+)?(image\s+)?prompt\b/.test(
+      normalized
+    );
+
+  if (asksForPromptOnly) return false;
+
+  const imageNouns =
+    /\b(image|picture|photo|illustration|artwork|poster|logo|icon|avatar|wallpaper|banner|thumbnail|cover art)\b/;
+  const directImageCommand =
+    /^(please\s+)?(can you\s+|could you\s+|would you\s+)?(generate|create|make|draw|paint|sketch|render|design|produce)\s+(me\s+)?(an?\s+|the\s+)?(image|picture|photo|illustration|artwork|poster|logo|icon|avatar|wallpaper|banner|thumbnail|cover art)\b/;
+  const commandWithImageTarget =
+    /^(please\s+)?(can you\s+|could you\s+|would you\s+)?(generate|create|make|draw|paint|sketch|render|design|produce)\b/.test(
+      normalized
+    ) && imageNouns.test(normalized);
+
+  return directImageCommand.test(normalized) || commandWithImageTarget;
+}
+
 function mapRole(role: DbMessage["role"]): UiMessage["role"] {
   if (role === "USER") return "user";
   if (role === "ASSISTANT") return "assistant";
@@ -212,6 +236,8 @@ function ChatPanelContent({
 
   const hasCredits = credits > 0;
   const hasImageCredits = credits >= imageCreditsPerGeneration;
+  const imagePromptDetected =
+    composerMode === "DEFAULT" && looksLikeImageGenerationPrompt(input);
   const canSubmit =
     !streaming &&
     hasCredits &&
@@ -224,6 +250,8 @@ function ChatPanelContent({
     ? "You are out of credits..."
     : composerMode === "IMAGE"
       ? `Describe the image to generate (${imageCreditsPerGeneration} credits)...`
+      : imagePromptDetected
+        ? `Press send to generate this image (${imageCreditsPerGeneration} credits)`
       : "Ask, plan, debug, draft or explore...";
 
   useEffect(() => {
@@ -468,9 +496,13 @@ function ChatPanelContent({
   async function handleSubmit(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
 
-    const requestComposerMode = composerMode;
+    const trimmedInput = input.trim();
+    const requestComposerMode =
+      composerMode === "DEFAULT" && looksLikeImageGenerationPrompt(trimmedInput)
+        ? "IMAGE"
+        : composerMode;
     const cleanInput =
-      input.trim() ||
+      trimmedInput ||
       (requestComposerMode !== "IMAGE" && attachments.length > 0
         ? "Please analyze the attached file(s)."
         : "");
@@ -1022,6 +1054,17 @@ function ChatPanelContent({
                     <Brain className="h-4 w-4" />
                   )}
                   {composerModeLabels[composerMode]}
+                </button>
+              ) : null}
+
+              {imagePromptDetected ? (
+                <button
+                  type="button"
+                  onClick={() => setGuidedMode("IMAGE")}
+                  className="inline-flex h-8 items-center gap-2 rounded-full bg-cyan-400/10 px-3 text-xs font-black text-cyan-100 ring-1 ring-cyan-300/20 transition hover:bg-cyan-400/15 sm:h-11 sm:text-sm"
+                >
+                  <ImageIcon className="h-4 w-4" />
+                  Image
                 </button>
               ) : null}
 

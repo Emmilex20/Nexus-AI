@@ -82,6 +82,7 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
     return (
       <div className="-mx-4 -my-6 sm:-mx-5 lg:-m-5">
         <ChatPanel
+          key={conversation.id}
           conversationId={conversation.id}
           conversationTitle={conversation.title}
           conversationMode={conversation.mode}

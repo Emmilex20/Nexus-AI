@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { ChatPreferencesProvider } from "@/components/chat/chat-preferences";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
@@ -5,6 +6,13 @@ import { MobileAppHeader } from "@/components/dashboard/mobile-app-header";
 import { SuspendedNotice } from "@/components/dashboard/suspended-notice";
 import { getCurrentDbUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default async function AppLayout({
   children,

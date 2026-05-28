@@ -4,7 +4,11 @@ import { SectionHeading } from "@/components/shared/section-heading";
 
 export const metadata: Metadata = {
   title: "Pricing",
-  description: "Simple pricing for Nexus AI.",
+  description:
+    "Compare Nexus AI plans, monthly credits, billing options, and credit packages for AI chat, coding, and research workflows.",
+  alternates: {
+    canonical: "/pricing",
+  },
 };
 
 const plans = [

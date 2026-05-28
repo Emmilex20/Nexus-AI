@@ -3,7 +3,11 @@ import { Container } from "@/components/shared/container";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
-  description: "Nexus AI terms of service.",
+  description:
+    "Read the Nexus AI terms of service for platform access, responsible usage, billing, AI outputs, and account rules.",
+  alternates: {
+    canonical: "/terms",
+  },
 };
 
 export default function TermsPage() {

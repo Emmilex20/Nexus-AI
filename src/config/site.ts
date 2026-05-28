@@ -1,22 +1,39 @@
+const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+const vercelAppUrl =
+  process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+const productionUrl = vercelAppUrl ? `https://${vercelAppUrl}` : undefined;
+const shouldIgnoreLocalUrl =
+  process.env.NODE_ENV === "production" && configuredAppUrl?.includes("localhost");
+const siteUrl = (
+  shouldIgnoreLocalUrl
+    ? productionUrl
+    : configuredAppUrl ?? productionUrl ?? "https://nexus-ai-jet-kappa.vercel.app"
+).replace(/\/$/, "");
+
 export const siteConfig = {
   name: "Nexus AI",
   shortName: "Nexus",
   description:
-    "Nexus AI is an AI workspace for search, coding, research, files, and productivity.",
-  url: "https://yourdomain.com",
-  ogImage: "/og-image.png",
+    "Nexus AI is a professional AI workspace for chat, coding, research, files, projects, billing, and productivity.",
+  url: siteUrl,
+  ogImage: "/opengraph-image",
   keywords: [
     "AI assistant",
+    "AI chat assistant",
+    "AI workspace",
     "AI search engine",
     "AI code assistant",
+    "AI research assistant",
+    "AI file assistant",
+    "AI productivity platform",
     "ChatGPT alternative",
-    "AI productivity workspace",
     "AI for developers",
+    "Nexus AI",
   ],
   links: {
     twitter: "",
     github: "",
-    support: "support@yourdomain.com",
+    support: "support@nexusai.app",
   },
   nav: [
     { label: "Features", href: "/features" },

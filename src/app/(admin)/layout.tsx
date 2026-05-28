@@ -1,6 +1,14 @@
+import type { Metadata } from "next";
 import { AdminMobileHeader } from "@/components/admin/admin-mobile-header";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { getAdminUser } from "@/lib/admin";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default async function AdminLayout({
   children,

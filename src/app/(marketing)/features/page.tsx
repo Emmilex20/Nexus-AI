@@ -5,7 +5,11 @@ import { SectionHeading } from "@/components/shared/section-heading";
 
 export const metadata: Metadata = {
   title: "Features",
-  description: "Explore Nexus AI features for search, coding, files and productivity.",
+  description:
+    "Explore Nexus AI features for AI chat, coding help, research, file workflows, projects, billing, and productivity.",
+  alternates: {
+    canonical: "/features",
+  },
 };
 
 const features = [

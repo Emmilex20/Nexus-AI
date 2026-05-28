@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -12,6 +13,15 @@ import {
   Zap,
 } from "lucide-react";
 import { Container } from "@/components/shared/container";
+import { siteConfig } from "@/config/site";
+
+export const metadata: Metadata = {
+  title: `${siteConfig.name} - AI Workspace for Builders`,
+  description: siteConfig.description,
+  alternates: {
+    canonical: "/",
+  },
+};
 
 const flowSteps = [
   {

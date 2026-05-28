@@ -1,6 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { Sparkles } from "lucide-react";
+import { BrandMark } from "@/components/shared/brand-mark";
 import { siteConfig } from "@/config/site";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,9 +17,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
       <div className="w-full max-w-md">
         <Link href="/" className="mx-auto mb-8 flex w-fit items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-blue-500 shadow-lg shadow-violet-500/25">
-            <Sparkles className="h-5 w-5" />
-          </div>
+          <BrandMark className="h-12 w-12" priority />
 
           <div>
             <p className="font-black text-white">{siteConfig.name}</p>

@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Clock3, Menu, MessageSquarePlus, Sparkles, X } from "lucide-react";
+import { Clock3, Menu, MessageSquarePlus, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { MountedUserButton } from "@/components/auth/mounted-user-button";
 import { RecentChatItem } from "@/components/dashboard/recent-chat-item";
+import { BrandMark } from "@/components/shared/brand-mark";
 import { appNavItems } from "@/config/app-nav";
 import { cn } from "@/lib/utils";
 
@@ -28,9 +29,7 @@ export function MobileAppHeader({ conversations = [] }: MobileAppHeaderProps) {
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[#070a13]/95 backdrop-blur-xl lg:hidden">
       <div className="flex h-14 items-center justify-between px-3">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 via-violet-500 to-fuchsia-500">
-            <Sparkles className="h-4 w-4 text-white" />
-          </div>
+          <BrandMark className="h-9 w-9 rounded-[1rem]" priority />
           <div>
             <p className="text-sm font-black leading-none text-white">Nexus AI</p>
             <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">

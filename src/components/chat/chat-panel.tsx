@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { ClipboardEvent, FormEvent, ReactNode } from "react";
 import {
   ArrowUp,
   Bot,
@@ -414,13 +414,23 @@ export function ChatPanel({
     });
   }
 
-  async function handleFiles(files: FileList | null) {
-    if (!files?.length) return;
+  async function handleFileArray(files: File[]) {
+    if (files.length === 0) return;
 
     setAttachmentError("");
 
     const availableSlots = Math.max(0, 4 - attachments.length);
-    const selectedFiles = Array.from(files).slice(0, availableSlots);
+
+    if (availableSlots === 0) {
+      setAttachmentError("You can attach up to 4 files.");
+      return;
+    }
+
+    if (files.length > availableSlots) {
+      setAttachmentError("You can attach up to 4 files.");
+    }
+
+    const selectedFiles = files.slice(0, availableSlots);
     const nextAttachments: ComposerAttachment[] = [];
 
     for (const file of selectedFiles) {
@@ -461,6 +471,40 @@ export function ChatPanel({
     }
 
     setAttachments((current) => [...current, ...nextAttachments].slice(0, 4));
+  }
+
+  async function handleFiles(files: FileList | null) {
+    if (!files?.length) return;
+
+    await handleFileArray(Array.from(files));
+  }
+
+  function getFilesFromClipboard(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const clipboardFiles = Array.from(event.clipboardData.files);
+    const itemFiles = Array.from(event.clipboardData.items)
+      .map((item) => (item.kind === "file" ? item.getAsFile() : null))
+      .filter((file): file is File => Boolean(file));
+
+    return [...clipboardFiles, ...itemFiles].filter(
+      (file, index, allFiles) =>
+        allFiles.findIndex(
+          (candidate) =>
+            candidate.name === file.name &&
+            candidate.size === file.size &&
+            candidate.type === file.type
+        ) === index
+    );
+  }
+
+  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const imageFiles = getFilesFromClipboard(event).filter((file) =>
+      file.type.startsWith("image/")
+    );
+
+    if (imageFiles.length === 0) return;
+
+    event.preventDefault();
+    void handleFileArray(imageFiles);
   }
 
   function removeAttachment(attachmentId: string) {
@@ -895,6 +939,7 @@ export function ChatPanel({
                 rows={1}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
+                onPaste={handlePaste}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();

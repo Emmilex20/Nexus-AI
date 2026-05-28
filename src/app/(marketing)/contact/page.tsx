@@ -6,7 +6,11 @@ import { siteConfig } from "@/config/site";
 
 export const metadata: Metadata = {
   title: "Contact",
-  description: "Contact Nexus AI support.",
+  description:
+    "Contact Nexus AI support for product questions, billing, partnerships, account help, and feedback.",
+  alternates: {
+    canonical: "/contact",
+  },
 };
 
 export default function ContactPage() {

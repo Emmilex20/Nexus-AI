@@ -3,7 +3,11 @@ import { Container } from "@/components/shared/container";
 
 export const metadata: Metadata = {
   title: "Acceptable Use Policy",
-  description: "Nexus AI acceptable use policy.",
+  description:
+    "Read the Nexus AI acceptable use policy for safe, lawful, and responsible use of AI chat, research, file, and coding tools.",
+  alternates: {
+    canonical: "/acceptable-use",
+  },
 };
 
 export default function AcceptableUsePage() {

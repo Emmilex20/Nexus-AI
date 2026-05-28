@@ -3,7 +3,11 @@ import { Container } from "@/components/shared/container";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
-  description: "Nexus AI privacy policy.",
+  description:
+    "Read the Nexus AI privacy policy for account data, usage data, billing information, AI workspace content, and user rights.",
+  alternates: {
+    canonical: "/privacy",
+  },
 };
 
 export default function PrivacyPage() {

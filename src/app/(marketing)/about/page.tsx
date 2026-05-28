@@ -4,7 +4,11 @@ import { SectionHeading } from "@/components/shared/section-heading";
 
 export const metadata: Metadata = {
   title: "About",
-  description: "Learn about Nexus AI.",
+  description:
+    "Learn about Nexus AI, a modern AI workspace built for builders, creators, students, teams, and businesses.",
+  alternates: {
+    canonical: "/about",
+  },
 };
 
 export default function AboutPage() {

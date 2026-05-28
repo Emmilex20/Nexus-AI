@@ -8,10 +8,10 @@ import {
   Eye,
   EyeOff,
   MessageSquarePlus,
-  Sparkles,
 } from "lucide-react";
 import { MountedUserButton } from "@/components/auth/mounted-user-button";
 import { RecentChatItem } from "@/components/dashboard/recent-chat-item";
+import { BrandMark } from "@/components/shared/brand-mark";
 import { appNavItems } from "@/config/app-nav";
 import { cn } from "@/lib/utils";
 
@@ -35,9 +35,7 @@ export function AppSidebar({ conversations = [] }: AppSidebarProps) {
   return (
     <aside className="sidebar-scrollbar fixed left-0 top-0 z-40 hidden h-screen w-60 flex-col overflow-y-auto border-r border-white/10 bg-[#070a13]/95 p-3.5 lg:flex">
       <Link href="/dashboard" className="flex items-center gap-2.5 px-1">
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 via-violet-500 to-fuchsia-500 shadow-lg shadow-cyan-500/20">
-          <Sparkles className="h-4 w-4 text-white" />
-        </div>
+        <BrandMark className="h-10 w-10" priority />
 
         <div className="min-w-0">
           <p className="truncate text-sm font-black tracking-tight text-white">

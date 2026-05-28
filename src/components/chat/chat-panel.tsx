@@ -332,6 +332,17 @@ function ChatPanelContent({
     bottomRef.current?.scrollIntoView({ behavior, block: "end" });
   }
 
+  function scrollToMessageStart(messageId: string) {
+    shouldFollowStreamRef.current = false;
+    setShowScrollToBottom(true);
+
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById(`chat-message-${messageId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   async function refreshCredits() {
     const res = await fetch("/api/me");
     const data = await res.json();
@@ -556,8 +567,8 @@ function ChatPanelContent({
     setAttachmentError("");
     setAttachments([]);
     setComposerMode("DEFAULT");
-    shouldFollowStreamRef.current = true;
-    setShowScrollToBottom(false);
+    shouldFollowStreamRef.current = false;
+    setShowScrollToBottom(true);
 
     const userMessage: UiMessage = {
       id: crypto.randomUUID(),
@@ -574,6 +585,7 @@ function ChatPanelContent({
     };
 
     setMessages((current) => [...current, userMessage, assistantMessage]);
+    scrollToMessageStart(assistantMessage.id);
 
     if (requestComposerMode === "IMAGE") {
       await generateImageResponse({
@@ -785,8 +797,8 @@ function ChatPanelContent({
 
     if (!previousUserMessage || assistantMessage?.role !== "assistant") return;
 
-    shouldFollowStreamRef.current = true;
-    setShowScrollToBottom(false);
+    shouldFollowStreamRef.current = false;
+    setShowScrollToBottom(true);
 
     setMessages((current) =>
       current.map((message) =>
@@ -798,6 +810,7 @@ function ChatPanelContent({
           : message
       )
     );
+    scrollToMessageStart(assistantMessage.id);
 
     void streamAssistantResponse({
       message: previousUserMessage.content,
@@ -882,6 +895,7 @@ function ChatPanelContent({
                 return (
                   <div
                     key={message.id}
+                    id={`chat-message-${message.id}`}
                     className="mx-auto max-w-2xl rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center text-sm leading-6 text-slate-400"
                   >
                     {message.content}
@@ -891,7 +905,11 @@ function ChatPanelContent({
 
               if (message.role === "user") {
                 return (
-                  <div key={message.id} className="group flex justify-end">
+                  <div
+                    key={message.id}
+                    id={`chat-message-${message.id}`}
+                    className="group flex justify-end"
+                  >
                     <div className="max-w-[88%] rounded-[1.35rem] bg-[#2f2f2f] px-4 py-3 text-[15px] leading-7 text-white shadow-lg shadow-black/10 sm:max-w-[72%] sm:px-5 sm:py-4">
                       {message.attachments?.length ? (
                         <AttachmentPreviewList
@@ -914,7 +932,11 @@ function ChatPanelContent({
               }
 
               return (
-                <div key={message.id} className="group">
+                <div
+                  key={message.id}
+                  id={`chat-message-${message.id}`}
+                  className="group scroll-mt-4 sm:scroll-mt-6"
+                >
                   {message.content ? (
                     <MessageContent content={message.content} />
                   ) : (

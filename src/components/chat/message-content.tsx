@@ -12,10 +12,87 @@ type MessageContentProps = {
 
 export function MessageContent({ content }: MessageContentProps) {
   return (
-    <div className="prose prose-invert max-w-none text-[15px] leading-8 text-slate-100 prose-headings:mb-4 prose-headings:mt-9 prose-headings:font-black prose-headings:tracking-tight prose-p:my-4 prose-p:leading-8 prose-a:text-cyan-200 prose-a:underline prose-a:decoration-cyan-200/40 prose-a:underline-offset-4 prose-strong:text-white prose-ul:my-5 prose-ol:my-5 prose-li:my-2 prose-li:pl-1 prose-blockquote:border-l-cyan-300 prose-blockquote:text-slate-300 prose-hr:border-white/10 prose-table:text-sm prose-th:border-b prose-th:border-white/15 prose-th:pb-3 prose-th:text-left prose-td:border-b prose-td:border-white/10 prose-td:py-3 prose-code:font-mono prose-code:text-cyan-100 prose-pre:m-0 prose-pre:bg-transparent prose-pre:p-0 sm:text-base sm:leading-8">
+    <div className="max-w-none text-[15px] leading-8 text-slate-100 sm:text-base sm:leading-8">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          h1: ({ children }) => (
+            <h1 className="mb-5 mt-10 text-3xl font-black tracking-tight text-white first:mt-0">
+              {children}
+            </h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="mb-4 mt-10 text-2xl font-black tracking-tight text-white first:mt-0">
+              {children}
+            </h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="mb-3 mt-8 text-xl font-black tracking-tight text-white first:mt-0">
+              {children}
+            </h3>
+          ),
+          h4: ({ children }) => (
+            <h4 className="mb-3 mt-7 text-lg font-black text-white first:mt-0">
+              {children}
+            </h4>
+          ),
+          p: ({ children }) => (
+            <p className="my-4 text-pretty leading-8 text-slate-100 first:mt-0 last:mb-0">
+              {children}
+            </p>
+          ),
+          ul: ({ children }) => (
+            <ul className="my-5 list-disc space-y-2 pl-6 marker:text-slate-400">
+              {children}
+            </ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="my-5 list-decimal space-y-2 pl-6 marker:font-bold marker:text-slate-300">
+              {children}
+            </ol>
+          ),
+          li: ({ children }) => (
+            <li className="pl-1 leading-8 text-slate-100">{children}</li>
+          ),
+          strong: ({ children }) => (
+            <strong className="font-black text-white">{children}</strong>
+          ),
+          a: ({ children, href }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-cyan-200 underline decoration-cyan-200/40 underline-offset-4 transition hover:text-cyan-100"
+            >
+              {children}
+            </a>
+          ),
+          blockquote: ({ children }) => (
+            <blockquote className="my-6 border-l-2 border-cyan-300/70 pl-4 text-slate-300">
+              {children}
+            </blockquote>
+          ),
+          hr: () => <hr className="my-8 border-white/10" />,
+          table: ({ children }) => (
+            <div className="my-7 overflow-x-auto rounded-2xl border border-white/10">
+              <table className="w-full min-w-[520px] border-collapse text-left text-sm">
+                {children}
+              </table>
+            </div>
+          ),
+          thead: ({ children }) => (
+            <thead className="bg-white/[0.04] text-slate-200">{children}</thead>
+          ),
+          th: ({ children }) => (
+            <th className="border-b border-white/10 px-4 py-3 font-black">
+              {children}
+            </th>
+          ),
+          td: ({ children }) => (
+            <td className="border-b border-white/10 px-4 py-3 text-slate-200">
+              {children}
+            </td>
+          ),
           pre: ({ children }) => {
             const code = getTextFromNode(children).replace(/\n$/, "");
             const language = getLanguageFromCodeNode(children);

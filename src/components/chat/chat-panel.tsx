@@ -69,6 +69,11 @@ type ComposerMode = "DEFAULT" | "THINKING" | "DEEP_RESEARCH" | "WEB_SEARCH";
 
 type SiteSearchMode = "WEB" | "SPECIFIC";
 
+type ImagePreview = {
+  src: string;
+  name: string;
+};
+
 const quickPrompts = [
   "Summarize the next steps",
   "Turn this into a checklist",
@@ -172,6 +177,7 @@ export function ChatPanel({
   const [siteError, setSiteError] = useState("");
   const [sitesMenuOpen, setSitesMenuOpen] = useState(false);
   const [sitesModalOpen, setSitesModalOpen] = useState(false);
+  const [previewImage, setPreviewImage] = useState<ImagePreview | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -433,16 +439,18 @@ export function ChatPanel({
     const selectedFiles = files.slice(0, availableSlots);
     const nextAttachments: ComposerAttachment[] = [];
 
-    for (const file of selectedFiles) {
+    for (const [index, file] of selectedFiles.entries()) {
       if (file.size > 5_000_000) {
         setAttachmentError("Files must be 5MB or smaller.");
         continue;
       }
 
       if (file.type.startsWith("image/")) {
+        const fallbackExtension = file.type.split("/")[1] || "png";
+
         nextAttachments.push({
           id: crypto.randomUUID(),
-          name: file.name,
+          name: file.name || `pasted-image-${index + 1}.${fallbackExtension}`,
           type: file.type,
           size: file.size,
           kind: "image",
@@ -456,7 +464,7 @@ export function ChatPanel({
 
         nextAttachments.push({
           id: crypto.randomUUID(),
-          name: file.name,
+          name: file.name || `attached-file-${index + 1}.txt`,
           type: file.type || "text/plain",
           size: file.size,
           kind: "text",
@@ -697,21 +705,11 @@ export function ChatPanel({
                   ) : (
                     <div>
                       {message.attachments?.length ? (
-                        <div className="mb-3 flex flex-wrap gap-2">
-                          {message.attachments.map((attachment) => (
-                            <div
-                              key={attachment.id}
-                              className="inline-flex max-w-full items-center gap-2 rounded-xl bg-slate-950/10 px-2.5 py-1.5 text-xs font-bold text-slate-700"
-                            >
-                              {attachment.kind === "image" ? (
-                                <ImageIcon className="h-3.5 w-3.5" />
-                              ) : (
-                                <FileText className="h-3.5 w-3.5" />
-                              )}
-                              <span className="truncate">{attachment.name}</span>
-                            </div>
-                          ))}
-                        </div>
+                        <AttachmentPreviewList
+                          attachments={message.attachments}
+                          variant="message"
+                          onPreview={setPreviewImage}
+                        />
                       ) : null}
 
                       <div className="whitespace-pre-wrap">{message.content}</div>
@@ -765,27 +763,16 @@ export function ChatPanel({
           />
 
           {attachments.length > 0 || attachmentError ? (
-            <div className="mb-2 flex flex-wrap gap-2 px-1">
-              {attachments.map((attachment) => (
-                <button
-                  key={attachment.id}
-                  type="button"
-                  onClick={() => removeAttachment(attachment.id)}
-                  className="inline-flex max-w-full items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-200 ring-1 ring-white/10"
-                  title="Remove attachment"
-                >
-                  {attachment.kind === "image" ? (
-                    <ImageIcon className="h-3.5 w-3.5 text-cyan-200" />
-                  ) : (
-                    <FileText className="h-3.5 w-3.5 text-cyan-200" />
-                  )}
-                  <span className="max-w-36 truncate">{attachment.name}</span>
-                  <X className="h-3.5 w-3.5 text-slate-400" />
-                </button>
-              ))}
+            <div className="mb-2 px-1">
+              <AttachmentPreviewList
+                attachments={attachments}
+                variant="composer"
+                onPreview={setPreviewImage}
+                onRemove={removeAttachment}
+              />
 
               {attachmentError ? (
-                <p className="w-full px-1 text-xs font-semibold text-red-200">
+                <p className="mt-2 px-1 text-xs font-semibold text-red-200">
                   {attachmentError}
                 </p>
               ) : null}
@@ -1046,6 +1033,160 @@ export function ChatPanel({
               </div>
             ) : null}
           </div>
+        </div>
+      ) : null}
+
+      {previewImage ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 px-4 py-8 backdrop-blur-sm"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div
+            className="relative max-h-full w-full max-w-5xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="truncate text-sm font-black text-white">
+                {previewImage.name}
+              </p>
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/15"
+                aria-label="Close image preview"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={previewImage.src}
+              alt={previewImage.name}
+              className="mx-auto max-h-[78dvh] max-w-full rounded-[1.5rem] border border-white/10 object-contain shadow-2xl shadow-black/50"
+            />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AttachmentPreviewList({
+  attachments,
+  variant,
+  onPreview,
+  onRemove,
+}: {
+  attachments: ComposerAttachment[];
+  variant: "composer" | "message";
+  onPreview: (image: ImagePreview) => void;
+  onRemove?: (attachmentId: string) => void;
+}) {
+  const imageAttachments = attachments.filter(
+    (attachment) => attachment.kind === "image" && attachment.dataUrl
+  );
+  const fileAttachments = attachments.filter(
+    (attachment) => attachment.kind !== "image" || !attachment.dataUrl
+  );
+
+  return (
+    <div
+      className={cn(
+        "space-y-2",
+        variant === "message" ? "mb-3" : "mb-1"
+      )}
+    >
+      {imageAttachments.length > 0 ? (
+        <div
+          className={cn(
+            "flex flex-wrap gap-2",
+            variant === "message" && "justify-end"
+          )}
+        >
+          {imageAttachments.map((attachment) => (
+            <div
+              key={attachment.id}
+              className={cn(
+                "group relative overflow-hidden rounded-2xl border bg-slate-950/5",
+                variant === "composer"
+                  ? "h-24 w-24 border-white/10"
+                  : "max-h-72 max-w-full border-slate-950/10"
+              )}
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  onPreview({
+                    src: attachment.dataUrl ?? "",
+                    name: attachment.name,
+                  })
+                }
+                className={cn(
+                  "block h-full w-full overflow-hidden text-left",
+                  variant === "message" ? "cursor-zoom-in" : "cursor-pointer"
+                )}
+                aria-label={`Preview ${attachment.name}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={attachment.dataUrl}
+                  alt={attachment.name}
+                  className={cn(
+                    "h-full w-full object-cover",
+                    variant === "message" && "max-h-72 object-contain"
+                  )}
+                />
+              </button>
+
+              {onRemove ? (
+                <button
+                  type="button"
+                  onClick={() => onRemove(attachment.id)}
+                  className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white shadow-lg transition hover:bg-black"
+                  aria-label={`Remove ${attachment.name}`}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+
+              {variant === "composer" ? (
+                <div className="absolute inset-x-0 bottom-0 bg-black/65 px-2 py-1">
+                  <p className="truncate text-[11px] font-bold text-white">
+                    {attachment.name}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {fileAttachments.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {fileAttachments.map((attachment) =>
+            onRemove ? (
+              <button
+                key={attachment.id}
+                type="button"
+                onClick={() => onRemove(attachment.id)}
+                className="inline-flex max-w-full items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-200 ring-1 ring-white/10"
+                title="Remove attachment"
+              >
+                <FileText className="h-3.5 w-3.5 text-cyan-200" />
+                <span className="max-w-36 truncate">{attachment.name}</span>
+                <X className="h-3.5 w-3.5 text-slate-400" />
+              </button>
+            ) : (
+              <div
+                key={attachment.id}
+                className="inline-flex max-w-full items-center gap-2 rounded-xl bg-slate-950/10 px-2.5 py-1.5 text-xs font-bold text-slate-700"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                <span className="truncate">{attachment.name}</span>
+              </div>
+            )
+          )}
         </div>
       ) : null}
     </div>

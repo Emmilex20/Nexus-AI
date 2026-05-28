@@ -8,6 +8,22 @@ import { chatRequestSchema } from "@/lib/validators/chat";
 
 export const maxDuration = 60;
 
+function getBase64ImageData(dataUrl: string) {
+  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+
+  if (!match) {
+    return {
+      image: dataUrl,
+      mediaType: undefined,
+    };
+  }
+
+  return {
+    image: match[2],
+    mediaType: match[1],
+  };
+}
+
 export async function POST(req: Request) {
   const user = await requireActiveUser();
 
@@ -128,10 +144,17 @@ export async function POST(req: Request) {
           ? `Regenerate the previous answer using this change request: ${retryInstruction}`
           : "Regenerate the previous answer with a fresh, improved response.";
 
+  const hasImageAttachments = attachments.some(
+    (attachment) => attachment.kind === "image" && attachment.dataUrl
+  );
+
   const finalUserContent = retry
     ? `${message}\n\n${retryDirective}`
     : [
         message,
+        hasImageAttachments
+          ? "The attached image(s) are part of this request. Inspect them directly and describe visible content, text, layout, objects, colors, and design details. Do not ask the user to describe the image first unless something is genuinely unreadable."
+          : "",
         composerMode === "THINKING"
           ? "Work in thinking mode: reason carefully, check assumptions, and give a more robust answer."
           : "",
@@ -154,10 +177,12 @@ export async function POST(req: Request) {
 
   for (const attachment of attachments) {
     if (attachment.kind === "image" && attachment.dataUrl) {
+      const imageData = getBase64ImageData(attachment.dataUrl);
+
       attachmentParts.push({
         type: "image",
-        image: attachment.dataUrl,
-        mediaType: attachment.type || undefined,
+        image: imageData.image,
+        mediaType: imageData.mediaType ?? attachment.type,
       });
       continue;
     }
@@ -200,6 +225,7 @@ Global style:
 - Be honest about uncertainty.
 - For business/product planning, be realistic and structured.
 - For coding help, give safe, production-aware code.
+- When image attachments are provided, you can inspect them directly. Analyze what is visible instead of saying you cannot view images.
 - Never pretend live web search or file upload is available unless the platform provides it.
 
 ${getModePrompt(conversation.mode)}

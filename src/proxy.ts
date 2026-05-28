@@ -13,6 +13,8 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/payments/webhook",
+  "/opengraph-image(.*)",
+  "/twitter-image(.*)",
   "/sitemap.xml",
   "/robots.txt",
 ]);

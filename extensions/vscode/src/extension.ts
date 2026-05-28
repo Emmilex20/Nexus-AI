@@ -2,7 +2,8 @@ import * as vscode from "vscode";
 
 const TOKEN_SECRET_KEY = "nexusAi.developerToken";
 const LAST_WELCOME_VERSION_KEY = "nexusAi.lastWelcomeVersion";
-const EXTENSION_VERSION = "0.3.0";
+const CONVERSATIONS_STATE_KEY = "nexusAi.conversations";
+const EXTENSION_VERSION = "0.3.1";
 const DEFAULT_MODEL = "gpt-4.1-mini";
 const PRODUCTION_API_URL = "https://nexus-ai-jet-kappa.vercel.app";
 const LOCAL_API_URL = "http://localhost:3000";
@@ -14,6 +15,7 @@ const MAX_FILE_CONTEXT_CHARS = 6000;
 const MAX_AGENT_FILE_CHARS = 60000;
 const MAX_AGENT_FILES = 12;
 const MAX_IMAGE_ATTACHMENTS = 4;
+const MAX_SAVED_CONVERSATIONS = 50;
 const EXTENSION_URI_AUTHORITY = "nexus-ai.nexus-ai-vscode";
 const EXCLUDED_WORKSPACE_GLOB =
   "{**/node_modules/**,**/.git/**,**/.next/**,**/dist/**,**/build/**,**/coverage/**,**/.vercel/**,**/.turbo/**,**/out/**,**/.cache/**,**/*.lock,**/package-lock.json,**/pnpm-lock.yaml,**/yarn.lock,**/.env,**/.env.*,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif,**/*.webp,**/*.ico,**/*.pdf,**/*.zip,**/*.gz,**/*.tgz,**/*.map}";
@@ -111,10 +113,22 @@ type AssistantMessage = {
   changes?: NexusAgentChange[];
 };
 
+type SavedConversation = {
+  id: string;
+  title: string;
+  workspaceName: string;
+  createdAt: string;
+  updatedAt: string;
+  remoteConversationId?: string;
+  messages: AssistantMessage[];
+  pendingChanges: NexusAgentChange[];
+};
+
 type WebviewMessage = {
   command: string;
   prompt?: string;
   path?: string;
+  conversationId?: string;
   permissionMode?: NexusPermissionMode;
   attachments?: NexusImageAttachment[];
 };
@@ -250,6 +264,9 @@ export function deactivate() {}
 class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
   private readonly views = new Set<vscode.WebviewView>();
   private readonly messages: AssistantMessage[] = [];
+  private conversations: SavedConversation[] = [];
+  private activeConversationId: string | undefined;
+  private viewMode: "list" | "chat" = "list";
   private pendingChanges: NexusAgentChange[] = [];
   private busy = false;
 
@@ -257,7 +274,9 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
     private readonly context: vscode.ExtensionContext,
     private readonly output: vscode.OutputChannel,
     private readonly workspaceProvider: NexusWorkspaceTreeProvider
-  ) {}
+  ) {
+    this.conversations = getSavedConversations(context);
+  }
 
   resolveWebviewView(webviewView: vscode.WebviewView) {
     this.views.add(webviewView);
@@ -272,6 +291,15 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.onDidReceiveMessage(async (message: WebviewMessage) => {
       switch (message.command) {
+        case "showConversations":
+          await this.showConversationList();
+          break;
+        case "newConversation":
+          await this.startNewConversation();
+          break;
+        case "openConversation":
+          await this.openConversation(message.conversationId);
+          break;
         case "submit":
           if (message.permissionMode) {
             await setPermissionMode(message.permissionMode);
@@ -296,6 +324,7 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
             role: "system",
             content: "Pending changes cleared.",
           });
+          await this.persistActiveConversation();
           await this.refresh();
           break;
         case "openFile":
@@ -343,10 +372,53 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
         connected,
         overview,
         messages: this.messages,
+        conversations: this.conversations,
+        activeConversationId: this.activeConversationId,
+        viewMode: this.viewMode,
         pendingChanges: this.pendingChanges,
         busy: this.busy,
       });
     }
+  }
+
+  async showConversationList() {
+    this.viewMode = "list";
+    this.activeConversationId = undefined;
+    this.messages.splice(0, this.messages.length);
+    this.pendingChanges = [];
+    await this.refresh();
+  }
+
+  async startNewConversation() {
+    this.viewMode = "chat";
+    this.activeConversationId = undefined;
+    this.messages.splice(0, this.messages.length);
+    this.pendingChanges = [];
+    await this.refresh();
+  }
+
+  async openConversation(conversationId: string | undefined) {
+    if (!conversationId) {
+      return;
+    }
+
+    const conversation = this.conversations.find((item) => item.id === conversationId);
+
+    if (!conversation) {
+      vscode.window.showInformationMessage("That Nexus AI conversation was not found.");
+      await this.showConversationList();
+      return;
+    }
+
+    this.viewMode = "chat";
+    this.activeConversationId = conversation.id;
+    this.messages.splice(
+      0,
+      this.messages.length,
+      ...conversation.messages.map(cloneAssistantMessage)
+    );
+    this.pendingChanges = conversation.pendingChanges.map(cloneAgentChange);
+    await this.refresh();
   }
 
   async submitPrompt(rawPrompt: string, attachments: NexusImageAttachment[] = []) {
@@ -359,10 +431,12 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
     const token = await this.context.secrets.get(TOKEN_SECRET_KEY);
 
     if (!token) {
+      this.viewMode = "chat";
       this.messages.push({
         role: "assistant",
         content: "Connect Nexus AI first, then I can work on this workspace.",
       });
+      await this.persistActiveConversation(rawPrompt);
       await this.refresh();
       const action = await vscode.window.showWarningMessage(
         "Connect Nexus AI before asking the coding assistant to edit files.",
@@ -376,6 +450,7 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
+    this.viewMode = "chat";
     this.messages.push({
       role: "user",
       content:
@@ -385,6 +460,7 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
     });
     this.busy = true;
     this.pendingChanges = [];
+    await this.persistActiveConversation(prompt);
     await this.refresh();
 
     try {
@@ -419,6 +495,7 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
         metadata: formatAgentMetadata(data),
         changes: this.pendingChanges,
       });
+      await this.persistActiveConversation(prompt, data.conversationId);
 
       if (this.pendingChanges.length > 0 && permissionMode === "auto-review") {
         await this.openReviewPreviews(this.pendingChanges);
@@ -426,6 +503,7 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
           role: "system",
           content: "Opened proposed change previews. Review them, then apply when ready.",
         });
+        await this.persistActiveConversation();
       }
 
       if (this.pendingChanges.length > 0 && permissionMode === "full-access") {
@@ -438,6 +516,7 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
         role: "assistant",
         content: `I could not complete that request: ${message}`,
       });
+      await this.persistActiveConversation();
       vscode.window.showErrorMessage(message);
     } finally {
       this.busy = false;
@@ -473,6 +552,7 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
       });
       this.pendingChanges = [];
       this.workspaceProvider.refresh();
+      await this.persistActiveConversation();
       await this.refresh();
       vscode.window.showInformationMessage("Nexus AI changes applied.");
     } catch (error: unknown) {
@@ -485,6 +565,7 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
         role: "assistant",
         content: `I could not apply the changes: ${message}`,
       });
+      await this.persistActiveConversation();
       await this.refresh();
     }
   }
@@ -523,6 +604,54 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
         viewColumn: vscode.ViewColumn.Beside,
       });
     }
+  }
+
+  private async persistActiveConversation(
+    titleSeed?: string,
+    remoteConversationId?: string
+  ) {
+    if (this.messages.length === 0 && this.pendingChanges.length === 0) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const workspaceName = getWorkspaceName() ?? "No workspace";
+    let conversation: SavedConversation | undefined = this.activeConversationId
+      ? this.conversations.find((item) => item.id === this.activeConversationId)
+      : undefined;
+
+    if (!conversation) {
+      conversation = {
+        id: createConversationId(),
+        title: createConversationTitle(titleSeed),
+        workspaceName,
+        createdAt: now,
+        updatedAt: now,
+        messages: [],
+        pendingChanges: [],
+      };
+      this.activeConversationId = conversation.id;
+    } else if (titleSeed && isUntitledConversation(conversation.title)) {
+      conversation.title = createConversationTitle(titleSeed);
+    }
+
+    const activeConversation = conversation;
+
+    activeConversation.updatedAt = now;
+    activeConversation.workspaceName = workspaceName;
+    activeConversation.messages = this.messages.map(cloneAssistantMessage);
+    activeConversation.pendingChanges = this.pendingChanges.map(cloneAgentChange);
+
+    if (remoteConversationId) {
+      activeConversation.remoteConversationId = remoteConversationId;
+    }
+
+    this.conversations = [
+      activeConversation,
+      ...this.conversations.filter((item) => item.id !== activeConversation.id),
+    ].slice(0, MAX_SAVED_CONVERSATIONS);
+
+    await saveConversations(this.context, this.conversations);
   }
 }
 
@@ -1046,6 +1175,110 @@ function formatAgentMetadata(data: NexusAgentResponse) {
     .join(" - ");
 }
 
+function getSavedConversations(context: vscode.ExtensionContext) {
+  const conversations =
+    context.workspaceState.get<SavedConversation[]>(CONVERSATIONS_STATE_KEY) ?? [];
+
+  return conversations
+    .filter(isSavedConversation)
+    .sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    )
+    .slice(0, MAX_SAVED_CONVERSATIONS);
+}
+
+async function saveConversations(
+  context: vscode.ExtensionContext,
+  conversations: SavedConversation[]
+) {
+  await context.workspaceState.update(
+    CONVERSATIONS_STATE_KEY,
+    conversations.slice(0, MAX_SAVED_CONVERSATIONS)
+  );
+}
+
+function isSavedConversation(value: unknown): value is SavedConversation {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<SavedConversation>;
+
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.title === "string" &&
+    typeof candidate.workspaceName === "string" &&
+    typeof candidate.createdAt === "string" &&
+    typeof candidate.updatedAt === "string" &&
+    Array.isArray(candidate.messages) &&
+    Array.isArray(candidate.pendingChanges)
+  );
+}
+
+function createConversationId() {
+  return `nexus-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+}
+
+function createConversationTitle(seed?: string) {
+  const title = (seed ?? "").replace(/\s+/g, " ").trim();
+
+  if (!title) {
+    return "New conversation";
+  }
+
+  return title.length > 54 ? `${title.slice(0, 51)}...` : title;
+}
+
+function isUntitledConversation(title: string) {
+  return title === "New conversation";
+}
+
+function cloneAgentChange(change: NexusAgentChange): NexusAgentChange {
+  return {
+    path: change.path,
+    action: change.action,
+    description: change.description,
+    content: change.content,
+  };
+}
+
+function cloneAssistantMessage(message: AssistantMessage): AssistantMessage {
+  return {
+    role: message.role,
+    content: message.content,
+    metadata: message.metadata,
+    changes: message.changes?.map(cloneAgentChange),
+  };
+}
+
+function getConversationPreview(conversation: SavedConversation) {
+  const message =
+    [...conversation.messages]
+      .reverse()
+      .find((item) => item.role !== "system" && item.content.trim().length > 0) ??
+    conversation.messages[conversation.messages.length - 1];
+
+  return message?.content.replace(/\s+/g, " ").trim().slice(0, 140) ?? "";
+}
+
+function formatConversationDate(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Recently";
+  }
+
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function showAnswerPanel(
   answer: string,
   metadata: {
@@ -1243,17 +1476,27 @@ function getAssistantViewHtml({
   connected,
   overview,
   messages,
+  conversations,
+  activeConversationId,
+  viewMode,
   pendingChanges,
   busy,
 }: {
   connected: boolean;
   overview: WorkspaceOverview;
   messages: AssistantMessage[];
+  conversations: SavedConversation[];
+  activeConversationId?: string;
+  viewMode: "list" | "chat";
   pendingChanges: NexusAgentChange[];
   busy: boolean;
 }) {
   const renderedMessages = messages.map(renderAssistantMessage).join("");
   const renderedChanges = renderPendingChanges(pendingChanges);
+  const renderedConversations = renderConversationList(
+    conversations,
+    activeConversationId
+  );
   const status = connected ? "Connected" : "Not connected";
   const apiMode = isLocalApiUrl(overview.apiUrl) ? "Local API" : "Production API";
   const workspaceStatus = overview.hasWorkspace ? "Workspace ready" : "No folder open";
@@ -1327,6 +1570,10 @@ function getAssistantViewHtml({
         display: none;
       }
 
+      .hidden {
+        display: none;
+      }
+
       .pill {
         border-radius: 999px;
         display: inline-block;
@@ -1396,6 +1643,63 @@ function getAssistantViewHtml({
         flex-direction: column;
         gap: 10px;
         margin-top: 12px;
+      }
+
+      .chat-toolbar {
+        align-items: center;
+        display: flex;
+        gap: 8px;
+        margin: 10px 0 2px;
+      }
+
+      .conversation-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .conversation-card,
+      .empty-state {
+        background: var(--vscode-input-background);
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 8px;
+        color: var(--vscode-foreground);
+        margin: 0;
+        padding: 10px;
+        text-align: left;
+        width: 100%;
+      }
+
+      .conversation-card {
+        cursor: pointer;
+      }
+
+      .conversation-card.active,
+      .conversation-card:hover {
+        border-color: var(--vscode-focusBorder);
+      }
+
+      .conversation-title {
+        font-weight: 800;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .conversation-meta,
+      .conversation-preview {
+        color: var(--vscode-descriptionForeground);
+        font-size: 11px;
+        line-height: 1.4;
+        margin-top: 5px;
+      }
+
+      .conversation-preview {
+        display: -webkit-box;
+        overflow: hidden;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
       }
 
       .message {
@@ -1632,14 +1936,25 @@ function getAssistantViewHtml({
           ${overview.activeFile ? `<p>Active file: ${escapeHtml(overview.activeFile)}</p>` : ""}
         </div>
 
-        ${renderedChanges}
+        ${
+          viewMode === "list"
+            ? renderedConversations
+            : `
+              <div class="chat-toolbar">
+                <button class="icon-button" type="button" onclick="send('showConversations')" title="Conversations">Back</button>
+                <button class="icon-button" type="button" onclick="send('newConversation')" title="New chat">New</button>
+              </div>
 
-        <div class="messages">
-          ${renderedMessages}
-        </div>
+              ${renderedChanges}
+
+              <div class="messages">
+                ${renderedMessages}
+              </div>
+            `
+        }
       </div>
 
-      <form class="composer" id="composer">
+      <form class="composer ${viewMode === "list" ? "hidden" : ""}" id="composer">
         <div class="composer-box" id="composerBox">
           <div class="attachments" id="attachments"></div>
           <textarea id="prompt" ${busy ? "disabled" : ""} placeholder="Ask Nexus AI to build, fix, refactor, inspect an image..."></textarea>
@@ -1669,6 +1984,9 @@ function getAssistantViewHtml({
       }
       function openFile(path) {
         vscode.postMessage({ command: 'openFile', path });
+      }
+      function openConversation(conversationId) {
+        vscode.postMessage({ command: 'openConversation', conversationId });
       }
       const attachments = [];
       const imageInput = document.getElementById('imageInput');
@@ -1766,6 +2084,49 @@ function getAssistantViewHtml({
     </script>
   </body>
 </html>`;
+}
+
+function renderConversationList(
+  conversations: SavedConversation[],
+  activeConversationId: string | undefined
+) {
+  const sorted = [...conversations].sort(
+    (a, b) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+
+  if (sorted.length === 0) {
+    return `<div class="conversation-list">
+      <button type="button" onclick="send('newConversation')">New chat</button>
+      <div class="empty-state">
+        <div class="conversation-title">No conversations yet</div>
+        <div class="conversation-meta">Start a chat and it will be saved here.</div>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="conversation-list">
+    <button type="button" onclick="send('newConversation')">New chat</button>
+    ${sorted
+      .map((conversation) =>
+        renderConversationCard(conversation, conversation.id === activeConversationId)
+      )
+      .join("")}
+  </div>`;
+}
+
+function renderConversationCard(
+  conversation: SavedConversation,
+  active: boolean
+) {
+  const preview = getConversationPreview(conversation);
+  const messageCount = conversation.messages.length;
+
+  return `<button class="conversation-card ${active ? "active" : ""}" type="button" onclick="openConversation(${JSON.stringify(conversation.id)})">
+    <div class="conversation-title">${escapeHtml(conversation.title)}</div>
+    <div class="conversation-meta">${escapeHtml(formatConversationDate(conversation.updatedAt))} &middot; ${messageCount} message${messageCount === 1 ? "" : "s"} &middot; ${escapeHtml(conversation.workspaceName)}</div>
+    ${preview ? `<div class="conversation-preview">${escapeHtml(preview)}</div>` : ""}
+  </button>`;
 }
 
 function renderAssistantMessage(message: AssistantMessage) {

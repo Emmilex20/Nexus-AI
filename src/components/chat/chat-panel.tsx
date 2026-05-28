@@ -125,6 +125,10 @@ const readableTextExtensions = new Set([
   "log",
 ]);
 
+const maxRawImageBytes = 12_000_000;
+const maxReferenceImageEdge = 1536;
+const referenceImageQuality = 0.88;
+
 const composerModeLabels: Record<ComposerMode, string> = {
   DEFAULT: "Standard",
   THINKING: "Thinking",
@@ -522,7 +526,16 @@ function ChatPanelContent({
         }),
       });
 
-      const data = (await response.json().catch(() => null)) as {
+      const responseText = await response.text();
+      const data = (responseText
+        ? (() => {
+            try {
+              return JSON.parse(responseText);
+            } catch {
+              return null;
+            }
+          })()
+        : null) as {
         assistantMessage?: {
           id: string;
           content: string;
@@ -532,7 +545,12 @@ function ChatPanelContent({
       } | null;
 
       if (!response.ok || !data?.assistantMessage) {
-        throw new Error(data?.error || "Failed to generate image");
+        throw new Error(
+          data?.error ||
+            (response.status === 504
+              ? "Image generation timed out. Please try again with a smaller reference image."
+              : "Failed to generate image")
+        );
       }
 
       setMessages((current) =>
@@ -669,6 +687,87 @@ function ChatPanelContent({
     });
   }
 
+  function getDataUrlSize(dataUrl: string) {
+    const base64 = dataUrl.split(",", 2)[1] ?? "";
+    const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+
+    return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+  }
+
+  function replaceFileExtension(fileName: string, extension: string) {
+    const cleanName = fileName.trim() || `reference-image.${extension}`;
+    const withoutExtension = cleanName.replace(/\.[a-zA-Z0-9]+$/, "");
+
+    return `${withoutExtension}.${extension}`;
+  }
+
+  function loadImageFromObjectUrl(objectUrl: string) {
+    return new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new window.Image();
+
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Failed to prepare image"));
+      image.src = objectUrl;
+    });
+  }
+
+  async function prepareImageAttachment(file: File, fallbackName: string) {
+    if (file.size > maxRawImageBytes) {
+      throw new Error("Images must be 12MB or smaller.");
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+
+    try {
+      const image = await loadImageFromObjectUrl(objectUrl);
+      const largestEdge = Math.max(image.naturalWidth, image.naturalHeight);
+      const scale =
+        largestEdge > maxReferenceImageEdge
+          ? maxReferenceImageEdge / largestEdge
+          : 1;
+      const width = Math.max(1, Math.round(image.naturalWidth * scale));
+      const height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+
+      if (!context) {
+        throw new Error("Failed to prepare image");
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      context.drawImage(image, 0, 0, width, height);
+
+      let dataUrl = canvas.toDataURL("image/webp", referenceImageQuality);
+      let type = "image/webp";
+      let extension = "webp";
+
+      if (!dataUrl.startsWith("data:image/webp")) {
+        dataUrl = canvas.toDataURL("image/jpeg", referenceImageQuality);
+        type = "image/jpeg";
+        extension = "jpg";
+      }
+
+      return {
+        name: replaceFileExtension(file.name || fallbackName, extension),
+        type,
+        size: getDataUrlSize(dataUrl),
+        dataUrl,
+      };
+    } catch {
+      const dataUrl = await readFileAsDataUrl(file);
+
+      return {
+        name: file.name || fallbackName,
+        type: file.type || "image/png",
+        size: getDataUrlSize(dataUrl) || file.size,
+        dataUrl,
+      };
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
   async function handleFileArray(files: File[]) {
     if (files.length === 0) return;
 
@@ -689,22 +788,32 @@ function ChatPanelContent({
     const nextAttachments: ComposerAttachment[] = [];
 
     for (const [index, file] of selectedFiles.entries()) {
-      if (file.size > 5_000_000) {
-        setAttachmentError("Files must be 5MB or smaller.");
+      if (file.type.startsWith("image/")) {
+        const fallbackExtension = file.type.split("/")[1] || "png";
+        const fallbackName = `pasted-image-${index + 1}.${fallbackExtension}`;
+
+        try {
+          const preparedImage = await prepareImageAttachment(file, fallbackName);
+
+          nextAttachments.push({
+            id: crypto.randomUUID(),
+            name: preparedImage.name,
+            type: preparedImage.type,
+            size: preparedImage.size,
+            kind: "image",
+            dataUrl: preparedImage.dataUrl,
+          });
+        } catch (err) {
+          setAttachmentError(
+            err instanceof Error ? err.message : "Failed to prepare image."
+          );
+        }
+
         continue;
       }
 
-      if (file.type.startsWith("image/")) {
-        const fallbackExtension = file.type.split("/")[1] || "png";
-
-        nextAttachments.push({
-          id: crypto.randomUUID(),
-          name: file.name || `pasted-image-${index + 1}.${fallbackExtension}`,
-          type: file.type,
-          size: file.size,
-          kind: "image",
-          dataUrl: await readFileAsDataUrl(file),
-        });
+      if (file.size > 5_000_000) {
+        setAttachmentError("Files must be 5MB or smaller.");
         continue;
       }
 

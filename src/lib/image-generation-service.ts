@@ -30,6 +30,8 @@ type ImageReference = {
   dataUrl: string;
 };
 
+const OPENAI_IMAGE_TIMEOUT_MS = 270_000;
+
 export class ImageGenerationError extends Error {
   status: number;
 
@@ -45,6 +47,50 @@ function blockquote(value: string) {
     .split("\n")
     .map((line) => `> ${line}`)
     .join("\n");
+}
+
+function imageRequestNeedsReference(prompt: string) {
+  const normalized = prompt.toLowerCase();
+
+  return (
+    /\b(this|the|attached|reference|original|same)\s+(image|photo|picture|face|person)\b/.test(
+      normalized
+    ) ||
+    /\b(keep|preserve|maintain)\s+(the\s+)?(face|identity|person|character)\b/.test(
+      normalized
+    ) ||
+    /\b(do not|don't)\s+(change|alter)\s+(the\s+)?(face|identity|person)\b/.test(
+      normalized
+    ) ||
+    /\b(restyle|style|edit|transform|enhance)\s+(this|the|attached)\s+(image|photo|picture)\b/.test(
+      normalized
+    )
+  );
+}
+
+async function fetchOpenAIImage(url: string, init: RequestInit) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, OPENAI_IMAGE_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ImageGenerationError(
+        "OpenAI image generation took too long. Please try again with a smaller reference image or medium quality.",
+        504
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export function buildGeneratedImageContent({
@@ -164,23 +210,26 @@ async function createOpenAIImageFromPrompt({
 
   const model =
     process.env.OPENAI_IMAGE_MODEL?.trim() || imageGenerationConfig.model;
-  const response = await fetch("https://api.openai.com/v1/images/generations", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      prompt,
-      n: 1,
-      size,
-      quality,
-      output_format: imageGenerationConfig.outputFormat,
-      output_compression: imageGenerationConfig.outputCompression,
-      moderation: "auto",
-    }),
-  });
+  const response = await fetchOpenAIImage(
+    "https://api.openai.com/v1/images/generations",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        prompt,
+        n: 1,
+        size,
+        quality,
+        output_format: imageGenerationConfig.outputFormat,
+        output_compression: imageGenerationConfig.outputCompression,
+        moderation: "auto",
+      }),
+    }
+  );
 
   const data = (await response.json().catch(() => null)) as
     | OpenAIImageResponse
@@ -254,13 +303,16 @@ async function createOpenAIImageFromReferences({
     );
   }
 
-  const response = await fetch("https://api.openai.com/v1/images/edits", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: formData,
-  });
+  const response = await fetchOpenAIImage(
+    "https://api.openai.com/v1/images/edits",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: formData,
+    }
+  );
 
   const data = (await response.json().catch(() => null)) as
     | OpenAIImageResponse
@@ -330,32 +382,17 @@ export async function generateConversationImage({
     throw new ImageGenerationError("Conversation not found", 404);
   }
 
-  let creditsReserved = false;
+  if (
+    validReferenceImages.length === 0 &&
+    imageRequestNeedsReference(prompt)
+  ) {
+    throw new ImageGenerationError(
+      "I did not receive the reference image for this edit. Please reattach the image and send again. If the image is visible on screen, hard refresh the page first so the latest uploader code is loaded.",
+      400
+    );
+  }
 
   try {
-    const creditReservation = await prisma.user.updateMany({
-      where: {
-        id: user.id,
-        credits: {
-          gte: creditsUsed,
-        },
-      },
-      data: {
-        credits: {
-          decrement: creditsUsed,
-        },
-      },
-    });
-
-    if (creditReservation.count === 0) {
-      throw new ImageGenerationError(
-        "Not enough credits for image generation",
-        402
-      );
-    }
-
-    creditsReserved = true;
-
     const generated =
       validReferenceImages.length > 0
         ? await createOpenAIImageFromReferences({
@@ -371,6 +408,27 @@ export async function generateConversationImage({
           });
 
     const result = await prisma.$transaction(async (tx) => {
+      const creditReservation = await tx.user.updateMany({
+        where: {
+          id: user.id,
+          credits: {
+            gte: creditsUsed,
+          },
+        },
+        data: {
+          credits: {
+            decrement: creditsUsed,
+          },
+        },
+      });
+
+      if (creditReservation.count === 0) {
+        throw new ImageGenerationError(
+          "Not enough credits for image generation",
+          402
+        );
+      }
+
       const userMessage = await tx.message.create({
         data: {
           role: "USER",
@@ -477,21 +535,6 @@ export async function generateConversationImage({
       },
     };
   } catch (error) {
-    if (creditsReserved) {
-      await prisma.user
-        .update({
-          where: {
-            id: user.id,
-          },
-          data: {
-            credits: {
-              increment: creditsUsed,
-            },
-          },
-        })
-        .catch(() => null);
-    }
-
     throw error;
   }
 }

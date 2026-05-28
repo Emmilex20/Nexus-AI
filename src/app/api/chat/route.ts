@@ -23,7 +23,7 @@ import { prisma } from "@/lib/prisma";
 import { chatRequestSchema } from "@/lib/validators/chat";
 import { buildWorkspaceContext } from "@/lib/workspace-context";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 function getBase64ImageData(dataUrl: string) {
   const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);

@@ -10,6 +10,7 @@ import {
   MessageSquarePlus,
 } from "lucide-react";
 import { MountedUserButton } from "@/components/auth/mounted-user-button";
+import { CreateConversationButton } from "@/components/chat/create-conversation-button";
 import { RecentChatItem } from "@/components/dashboard/recent-chat-item";
 import { BrandMark } from "@/components/shared/brand-mark";
 import { appNavItems } from "@/config/app-nav";
@@ -47,16 +48,15 @@ export function AppSidebar({ conversations = [] }: AppSidebarProps) {
         </div>
       </Link>
 
-      <Link
-        href="/chat"
-        className="mt-5 flex items-center justify-between rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-3.5 py-2.5 text-xs font-black text-cyan-100 transition hover:bg-cyan-400/15"
+      <CreateConversationButton
+        className="mt-5 flex w-full items-center justify-between rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-3.5 py-2.5 text-xs font-black text-cyan-100 transition hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <span className="inline-flex items-center gap-2.5">
           <MessageSquarePlus className="h-4 w-4" />
           New chat
         </span>
         <ArrowRight className="h-4 w-4" />
-      </Link>
+      </CreateConversationButton>
 
       <nav className="mt-5 space-y-1">
         {appNavItems.map((item) => {

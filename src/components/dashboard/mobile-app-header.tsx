@@ -5,6 +5,7 @@ import { Clock3, Menu, MessageSquarePlus, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { MountedUserButton } from "@/components/auth/mounted-user-button";
+import { CreateConversationButton } from "@/components/chat/create-conversation-button";
 import { RecentChatItem } from "@/components/dashboard/recent-chat-item";
 import { BrandMark } from "@/components/shared/brand-mark";
 import { appNavItems } from "@/config/app-nav";
@@ -54,14 +55,13 @@ export function MobileAppHeader({ conversations = [] }: MobileAppHeaderProps) {
       {open ? (
         <div className="sidebar-scrollbar max-h-[calc(100dvh-3.5rem)] overflow-y-auto border-t border-white/10 bg-[#070a13] px-3 py-3">
           <nav className="grid gap-2">
-            <Link
-              href="/chat"
-              onClick={() => setOpen(false)}
-              className="mb-1 flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-black text-slate-950"
+            <CreateConversationButton
+              onCreated={() => setOpen(false)}
+              className="mb-1 flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <MessageSquarePlus className="h-4 w-4" />
               New chat
-            </Link>
+            </CreateConversationButton>
 
             {appNavItems.map((item) => {
               const Icon = item.icon;

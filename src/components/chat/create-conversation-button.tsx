@@ -10,6 +10,7 @@ type CreateConversationButtonProps = {
   mode?: "CHAT" | "SEARCH" | "CODE" | "FILE";
   label?: string;
   className?: string;
+  onCreated?: (conversationId: string) => void;
   children?: ReactNode;
 };
 
@@ -18,6 +19,7 @@ export function CreateConversationButton({
   mode = "CHAT",
   label = "New chat",
   className,
+  onCreated,
   children,
 }: CreateConversationButtonProps) {
   const router = useRouter();
@@ -48,7 +50,10 @@ export function CreateConversationButton({
         throw new Error(data.error || "Failed to create conversation");
       }
 
-      router.push(`/chat?conversationId=${data.conversation.id}`);
+      const conversationId = data.conversation.id as string;
+
+      router.push(`/chat?conversationId=${conversationId}`);
+      onCreated?.(conversationId);
       router.refresh();
     } finally {
       setLoading(false);

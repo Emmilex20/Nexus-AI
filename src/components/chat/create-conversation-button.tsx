@@ -9,6 +9,7 @@ type CreateConversationButtonProps = {
   title?: string;
   mode?: "CHAT" | "SEARCH" | "CODE" | "FILE";
   intent?: "chat" | "image";
+  projectId?: string;
   label?: string;
   className?: string;
   onCreated?: (conversationId: string) => void;
@@ -19,6 +20,7 @@ export function CreateConversationButton({
   title = "New conversation",
   mode = "CHAT",
   intent = "chat",
+  projectId,
   label = "New chat",
   className,
   onCreated,
@@ -31,7 +33,7 @@ export function CreateConversationButton({
   async function createConversation() {
     setLoading(true);
 
-    const projectId = searchParams.get("projectId");
+    const fallbackProjectId = searchParams.get("projectId");
 
     try {
       const res = await fetch("/api/conversations", {
@@ -42,7 +44,7 @@ export function CreateConversationButton({
         body: JSON.stringify({
           title,
           mode,
-          projectId: projectId || undefined,
+          projectId: projectId || fallbackProjectId || undefined,
         }),
       });
 

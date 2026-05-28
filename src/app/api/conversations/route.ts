@@ -65,11 +65,30 @@ export async function POST(req: Request) {
     return NextResponse.json(createStatus.body, { status: createStatus.status });
   }
 
+  const project = result.data.projectId
+    ? await prisma.project.findFirst({
+        where: {
+          id: result.data.projectId,
+          userId: user.id,
+        },
+        select: {
+          id: true,
+        },
+      })
+    : null;
+
+  if (result.data.projectId && !project) {
+    return NextResponse.json(
+      { error: "Project not found" },
+      { status: 404 }
+    );
+  }
+
   const conversation = await prisma.conversation.create({
     data: {
       title: result.data.title ?? "New conversation",
       mode: result.data.mode,
-      projectId: result.data.projectId,
+      projectId: project?.id,
       userId: user.id,
     },
   });

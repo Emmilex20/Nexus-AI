@@ -7,14 +7,14 @@ type BillingEventsTableProps = {
 
 export function BillingEventsTable({ events }: BillingEventsTableProps) {
   return (
-    <section className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6">
+    <section className="rounded-4xl border border-white/10 bg-white/4 p-6">
       <h2 className="text-2xl font-black text-white">Billing events</h2>
       <p className="mt-2 text-sm text-slate-400">
         Track important billing changes, credit grants and payment outcomes.
       </p>
 
       <div className="mt-6 overflow-x-auto">
-        <table className="w-full min-w-[680px] text-left text-sm">
+        <table className="w-full min-w-170 text-left text-sm">
           <thead className="text-slate-500">
             <tr className="border-b border-white/10">
               <th className="py-3 pr-4 font-semibold">Event</th>

@@ -3,7 +3,6 @@ import {
   FolderKanban,
   History,
   LayoutDashboard,
-  MessageSquare,
   Settings,
 } from "lucide-react";
 
@@ -12,11 +11,6 @@ export const appNavItems = [
     label: "Dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
-  },
-  {
-    label: "Chat",
-    href: "/chat",
-    icon: MessageSquare,
   },
   {
     label: "Projects",

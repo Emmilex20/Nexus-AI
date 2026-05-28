@@ -1,7 +1,9 @@
 "use client";
 
+import type { Plan } from "@prisma/client";
 import { useEffect, useState } from "react";
 import { Code2, KeyRound, Loader2, Trash2 } from "lucide-react";
+import { planLimits, planHasVsCodeAccess } from "@/config/billing";
 import { formatDate } from "@/lib/format";
 
 type DeveloperToken = {
@@ -13,12 +15,18 @@ type DeveloperToken = {
   createdAt: string;
 };
 
-export function DeveloperTokenPanel() {
+type DeveloperTokenPanelProps = {
+  currentPlan: Plan;
+};
+
+export function DeveloperTokenPanel({ currentPlan }: DeveloperTokenPanelProps) {
   const [tokens, setTokens] = useState<DeveloperToken[]>([]);
   const [name, setName] = useState("VS Code");
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState("");
+  const plan = planLimits[currentPlan];
+  const hasVsCodeAccess = planHasVsCodeAccess(currentPlan);
 
   useEffect(() => {
     let ignore = false;
@@ -54,6 +62,11 @@ export function DeveloperTokenPanel() {
   }, []);
 
   function connectVsCode() {
+    if (!hasVsCodeAccess) {
+      window.location.assign("/billing");
+      return;
+    }
+
     setConnecting(true);
     setError("");
 
@@ -97,8 +110,14 @@ export function DeveloperTokenPanel() {
           </div>
           <h2 className="text-2xl font-black text-white">Developer tokens</h2>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-400">
-            Connect Nexus AI to VS Code without copying tokens. The browser opens
-            VS Code, and the extension stores the developer token securely.
+            Connect Nexus AI to VS Code without copying tokens. Available on Pro,
+            Builder and Team with plan-based monthly request limits.
+          </p>
+          <p className="mt-3 text-sm font-bold text-cyan-200">
+            Current plan: {plan.name}
+            {hasVsCodeAccess
+              ? ` - ${plan.vscodeMonthlyRequests.toLocaleString()} VS Code requests/month`
+              : " - VS Code integration not included"}
           </p>
         </div>
 
@@ -114,7 +133,7 @@ export function DeveloperTokenPanel() {
           <button
             type="button"
             onClick={connectVsCode}
-            disabled={connecting || name.trim().length < 2}
+            disabled={connecting || (hasVsCodeAccess && name.trim().length < 2)}
             className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {connecting ? (
@@ -122,7 +141,11 @@ export function DeveloperTokenPanel() {
             ) : (
               <KeyRound className="h-4 w-4" />
             )}
-            {connecting ? "Opening VS Code..." : "Connect VS Code"}
+            {hasVsCodeAccess
+              ? connecting
+                ? "Opening VS Code..."
+                : "Connect VS Code"
+              : "Upgrade for VS Code"}
           </button>
           <p className="mt-3 text-xs leading-5 text-slate-500">
             Approve the browser prompt to open VS Code. No manual copy or paste is

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { planHasVsCodeAccess, planLimits } from "@/config/billing";
 import { createDeveloperToken } from "@/lib/developer-tokens";
 import { getCurrentDbUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
@@ -56,6 +57,23 @@ export async function POST(req: Request) {
         details: parsed.error.flatten(),
       },
       { status: 400 }
+    );
+  }
+
+  if (!planHasVsCodeAccess(user.plan)) {
+    return NextResponse.json(
+      {
+        error: "VS Code integration is available on Pro, Builder and Team.",
+        currentPlan: user.plan,
+        upgradePlans: Object.entries(planLimits)
+          .filter(([, plan]) => plan.vscodeMonthlyRequests > 0)
+          .map(([key, plan]) => ({
+            id: key,
+            name: plan.name,
+            vscodeMonthlyRequests: plan.vscodeMonthlyRequests,
+          })),
+      },
+      { status: 403 }
     );
   }
 

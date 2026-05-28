@@ -86,6 +86,7 @@ export default async function ChatPage({ searchParams }: ChatPageProps) {
           conversationId={conversation.id}
           conversationTitle={conversation.title}
           conversationMode={conversation.mode}
+          initialPlan={user.plan}
           initialCredits={user.credits}
           initialMessages={conversation.messages}
         />

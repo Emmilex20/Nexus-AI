@@ -1,4 +1,4 @@
-import { Check, CreditCard, Wallet, Zap } from "lucide-react";
+import { Check, Code2, CreditCard, Wallet, Zap } from "lucide-react";
 import { getCurrentDbUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { creditPackages, planLimits } from "@/config/billing";
@@ -60,16 +60,21 @@ export default async function BillingPage() {
     : [];
 
   const currentPlan = user ? planLimits[user.plan] : planLimits.FREE;
-  const successfulPayments = payments.filter(
-    (payment) => payment.status === "SUCCESS"
-  ).length;
+  const nextPlan =
+    user?.plan === "FREE"
+      ? "PRO"
+      : user?.plan === "PRO"
+        ? "BUILDER"
+        : user?.plan === "BUILDER"
+          ? "TEAM"
+          : null;
 
   return (
     <div>
       <PageHeader
         eyebrow="Billing"
-        title="Manage credits and usage."
-        description="Track plan access, credits, usage history and future top-ups."
+        title="Plans for real AI work."
+        description="Choose monthly credits, model access and VS Code assistant limits that match how you build."
       />
 
       <div className="mb-8 grid gap-4 md:grid-cols-4">
@@ -104,9 +109,14 @@ export default async function BillingPage() {
         </div>
 
         <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-5">
-          <p className="text-sm text-slate-400">Successful payments</p>
+          <div className="flex items-center gap-3">
+            <Code2 className="h-5 w-5 text-violet-300" />
+            <p className="text-sm text-slate-400">VS Code limit</p>
+          </div>
           <p className="mt-3 text-3xl font-black text-white">
-            {successfulPayments}
+            {currentPlan.vscodeMonthlyRequests > 0
+              ? currentPlan.vscodeMonthlyRequests.toLocaleString()
+              : "None"}
           </p>
         </div>
       </div>
@@ -122,15 +132,25 @@ export default async function BillingPage() {
             </h2>
             <p className="mt-3 text-sm leading-7 text-slate-300">
               Includes {currentPlan.monthlyCredits.toLocaleString()} monthly credits.
+              {" "}
+              {currentPlan.vscodeMonthlyRequests > 0
+                ? `VS Code assistant includes ${currentPlan.vscodeMonthlyRequests.toLocaleString()} requests/month.`
+                : "VS Code assistant starts on Pro."}
               {user?.planRenewsAt
                 ? ` Next renewal: ${formatDate(user.planRenewsAt)}.`
                 : " Renewal will appear after a paid plan is activated."}
             </p>
           </div>
 
-          <div className="w-full max-w-xs lg:w-60">
-            <PaymentButton type="PLAN" plan="PRO" label="Upgrade to Pro" />
-          </div>
+          {nextPlan ? (
+            <div className="w-full max-w-xs lg:w-60">
+              <PaymentButton
+                type="PLAN"
+                plan={nextPlan}
+                label={`Upgrade to ${planLimits[nextPlan].name}`}
+              />
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -151,11 +171,19 @@ export default async function BillingPage() {
                 }
               >
                 <p className="text-xl font-black text-white">{plan.name}</p>
+                <p className="mt-2 min-h-12 text-sm leading-6 text-slate-400">
+                  {plan.tagline}
+                </p>
                 <p className="mt-3 text-3xl font-black text-white">
                   {plan.monthlyPrice}
                 </p>
                 <p className="mt-2 text-sm text-slate-400">
                   {plan.monthlyCredits.toLocaleString()} credits/month
+                </p>
+                <p className="mt-1 text-sm font-bold text-cyan-200">
+                  {plan.vscodeMonthlyRequests > 0
+                    ? `${plan.vscodeMonthlyRequests.toLocaleString()} VS Code requests/month`
+                    : "No VS Code integration"}
                 </p>
 
                 <div className="mt-6 space-y-3">
@@ -176,7 +204,7 @@ export default async function BillingPage() {
                     disabled
                     className="mt-6 w-full rounded-full bg-white/10 px-5 py-3 text-sm font-black text-slate-500"
                   >
-                    Current free option
+                    {active ? "Current plan" : "Free plan"}
                   </button>
                 ) : (
                   <PaymentButton

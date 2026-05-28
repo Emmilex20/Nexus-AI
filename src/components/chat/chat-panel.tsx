@@ -1,5 +1,6 @@
 "use client";
 
+import type { Plan } from "@prisma/client";
 import { useEffect, useRef, useState } from "react";
 import type { ClipboardEvent, FormEvent, ReactNode } from "react";
 import {
@@ -29,6 +30,7 @@ import {
 import { useChatPreferences } from "@/components/chat/chat-preferences";
 import { aiModels, chatModes, type AiModelId } from "@/config/ai-models";
 import type { ChatMode } from "@/config/ai-models";
+import { planLimits } from "@/config/billing";
 import { cn } from "@/lib/utils";
 
 type DbMessage = {
@@ -42,6 +44,7 @@ type ChatPanelProps = {
   conversationId: string;
   conversationTitle: string;
   conversationMode: ChatMode;
+  initialPlan: Plan;
   initialCredits: number;
   initialMessages: DbMessage[];
 };
@@ -153,6 +156,7 @@ function ChatPanelContent({
   conversationId,
   conversationTitle,
   conversationMode,
+  initialPlan,
   initialCredits,
   initialMessages,
 }: ChatPanelProps) {
@@ -166,6 +170,13 @@ function ChatPanelContent({
 
   const [input, setInput] = useState("");
   const { selectedModel, setSelectedModel } = useChatPreferences();
+  const allowedModelIds = planLimits[initialPlan].allowedModelIds;
+  const availableModels = aiModels.filter((model) =>
+    allowedModelIds.includes(model.id)
+  );
+  const safeSelectedModel = allowedModelIds.includes(selectedModel)
+    ? selectedModel
+    : availableModels[0]?.id ?? "gpt-4o-mini";
   const [credits, setCredits] = useState(initialCredits);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState("");
@@ -189,6 +200,12 @@ function ChatPanelContent({
   const hasCredits = credits > 0;
   const currentMode =
     chatModes.find((mode) => mode.id === conversationMode) ?? chatModes[0];
+
+  useEffect(() => {
+    if (safeSelectedModel !== selectedModel) {
+      setSelectedModel(safeSelectedModel);
+    }
+  }, [safeSelectedModel, selectedModel, setSelectedModel]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -277,7 +294,7 @@ function ChatPanelContent({
         body: JSON.stringify({
           conversationId,
           message,
-          model: selectedModel,
+          model: safeSelectedModel,
           attachments: requestAttachments,
           composerMode: requestComposerMode,
           siteSearchMode: requestSiteSearchMode,
@@ -843,7 +860,7 @@ function ChatPanelContent({
 
               <div className="relative w-fit shrink-0">
                 <select
-                  value={selectedModel}
+                  value={safeSelectedModel}
                   onChange={(event) =>
                     setSelectedModel(event.target.value as AiModelId)
                   }
@@ -851,7 +868,7 @@ function ChatPanelContent({
                   aria-label="Choose assistant model"
                   className="h-8 appearance-none rounded-xl border border-white/10 bg-white/[0.06] pl-3 pr-8 text-[11px] font-black text-white outline-none transition hover:bg-white/[0.09] disabled:cursor-not-allowed disabled:opacity-60 sm:h-11 sm:rounded-2xl sm:pl-3.5 sm:pr-9 sm:text-xs"
                 >
-                  {aiModels.map((model) => (
+                  {availableModels.map((model) => (
                     <option key={model.id} value={model.id} className="bg-[#242424]">
                       {model.name}
                     </option>

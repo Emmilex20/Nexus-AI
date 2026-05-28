@@ -1,6 +1,7 @@
 import { Bell, CreditCard, Shield, User } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { DeveloperTokenPanel } from "@/components/settings/developer-token-panel";
+import { getCurrentDbUser } from "@/lib/current-user";
 
 const settings = [
   {
@@ -25,7 +26,9 @@ const settings = [
   },
 ];
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const user = await getCurrentDbUser();
+
   return (
     <div>
       <PageHeader
@@ -56,7 +59,7 @@ export default function SettingsPage() {
         })}
       </div>
 
-      <DeveloperTokenPanel />
+      <DeveloperTokenPanel currentPlan={user?.plan ?? "FREE"} />
     </div>
   );
 }

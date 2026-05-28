@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAiModel } from "@/config/ai-models";
 import { getUserFromDeveloperToken } from "@/lib/developer-tokens";
+import { getPlanModelAccessError, getVsCodeAccessStatus } from "@/lib/plan-access";
 import { prisma } from "@/lib/prisma";
 
 export const maxDuration = 60;
@@ -28,6 +29,12 @@ export async function POST(req: Request) {
   }
 
   const { user } = tokenResult;
+  const access = await getVsCodeAccessStatus(user);
+
+  if (!access.ok) {
+    return NextResponse.json(access.body, { status: access.status });
+  }
+
   const body = await req.json();
   const parsed = vscodeChatSchema.safeParse(body);
 
@@ -42,6 +49,11 @@ export async function POST(req: Request) {
   }
 
   const selectedModel = getAiModel(parsed.data.model);
+  const modelAccessError = getPlanModelAccessError(user.plan, selectedModel.id);
+
+  if (modelAccessError) {
+    return NextResponse.json(modelAccessError, { status: 403 });
+  }
 
   if (user.credits < selectedModel.creditsPerMessage) {
     return NextResponse.json(

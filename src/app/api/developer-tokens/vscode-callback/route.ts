@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { planHasVsCodeAccess, planLimits } from "@/config/billing";
 import { createDeveloperToken } from "@/lib/developer-tokens";
 import { getCurrentDbUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
@@ -80,6 +81,66 @@ function vscodeConnectHtml(callbackUrl: string) {
 </html>`;
 }
 
+function vscodeUpgradeHtml(currentPlan: string) {
+  const planCards = Object.entries(planLimits)
+    .filter(([, plan]) => plan.vscodeMonthlyRequests > 0)
+    .map(
+      ([, plan]) =>
+        `<li><strong>${escapeHtml(plan.name)}</strong> - ${escapeHtml(
+          plan.monthlyPrice
+        )}/month, ${plan.vscodeMonthlyRequests.toLocaleString()} VS Code requests/month</li>`
+    )
+    .join("");
+
+  return `<!doctype html>
+<html>
+  <head>
+    <title>Nexus AI</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        align-items: center;
+        background: #070a18;
+        color: white;
+        display: flex;
+        font-family: system-ui, sans-serif;
+        justify-content: center;
+        margin: 0;
+        min-height: 100vh;
+        padding: 24px;
+      }
+      main {
+        border: 1px solid rgba(255,255,255,.12);
+        border-radius: 24px;
+        max-width: 640px;
+        padding: 32px;
+      }
+      p, li { color: #94a3b8; line-height: 1.7; }
+      a {
+        background: white;
+        border-radius: 999px;
+        color: #020617;
+        display: inline-flex;
+        font-weight: 800;
+        margin-top: 12px;
+        padding: 12px 18px;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Upgrade to connect VS Code</h1>
+      <p>Your current plan is ${escapeHtml(
+        currentPlan
+      )}. VS Code integration is included on paid coding plans:</p>
+      <ul>${planCards}</ul>
+      <a href="/billing">View plans</a>
+    </main>
+  </body>
+</html>`;
+}
+
 export async function GET(req: Request) {
   const user = await getCurrentDbUser();
   const url = new URL(req.url);
@@ -97,6 +158,15 @@ export async function GET(req: Request) {
 
   if (!isValidVsCodeRedirect(redirect)) {
     return NextResponse.json({ error: "Invalid redirect URI" }, { status: 400 });
+  }
+
+  if (!planHasVsCodeAccess(user.plan)) {
+    return new NextResponse(vscodeUpgradeHtml(planLimits[user.plan].name), {
+      status: 403,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+      },
+    });
   }
 
   const activeTokenCount = await prisma.developerToken.count({

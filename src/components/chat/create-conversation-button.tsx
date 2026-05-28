@@ -55,6 +55,8 @@ export function CreateConversationButton({
       router.push(`/chat?conversationId=${conversationId}`);
       onCreated?.(conversationId);
       router.refresh();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to create conversation");
     } finally {
       setLoading(false);
     }

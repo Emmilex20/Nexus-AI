@@ -3,6 +3,7 @@ import { streamText, type ModelMessage, type UserContent } from "ai";
 import { NextResponse } from "next/server";
 import { getAiModel, getModePrompt } from "@/config/ai-models";
 import { requireActiveUser } from "@/lib/current-user";
+import { getPlanModelAccessError } from "@/lib/plan-access";
 import { prisma } from "@/lib/prisma";
 import { chatRequestSchema } from "@/lib/validators/chat";
 
@@ -58,6 +59,11 @@ export async function POST(req: Request) {
     retryTargetMessageId,
   } = parsed.data;
   const selectedModel = getAiModel(model);
+  const modelAccessError = getPlanModelAccessError(user.plan, selectedModel.id);
+
+  if (modelAccessError) {
+    return NextResponse.json(modelAccessError, { status: 403 });
+  }
 
   if (user.credits < selectedModel.creditsPerMessage) {
     return NextResponse.json(

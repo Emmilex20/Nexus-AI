@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireActiveUser } from "@/lib/current-user";
+import { getConversationCreateStatus } from "@/lib/plan-access";
 import { prisma } from "@/lib/prisma";
 import { createConversationSchema } from "@/lib/validators/conversation";
 
@@ -56,6 +57,12 @@ export async function POST(req: Request) {
       },
       { status: 400 }
     );
+  }
+
+  const createStatus = await getConversationCreateStatus(user);
+
+  if (!createStatus.ok) {
+    return NextResponse.json(createStatus.body, { status: createStatus.status });
   }
 
   const conversation = await prisma.conversation.create({

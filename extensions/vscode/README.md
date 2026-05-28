@@ -23,8 +23,9 @@ Code. After install, reload VS Code if the commands do not appear immediately.
 3. Sign in with Nexus AI in the browser if asked.
 4. Approve the browser prompt to open VS Code.
 
-VS Code stores the developer token automatically. If the browser callback does
-not open VS Code, return to Nexus AI settings and click `Connect VS Code` again.
+VS Code integration is available on Pro, Builder, and Team plans. VS Code stores
+the developer token automatically. If the browser callback does not open VS Code,
+return to Nexus AI settings and click `Connect VS Code` again.
 
 ## API URL
 

@@ -10,6 +10,8 @@ import {
   Brain,
   Check,
   ChevronDown,
+  Code2,
+  Cpu,
   FileText,
   Globe,
   Image as ImageIcon,
@@ -19,6 +21,7 @@ import {
   Plus,
   Search,
   Sparkles,
+  Zap,
   X,
 } from "lucide-react";
 import { MessageContent } from "@/components/chat/message-content";
@@ -28,7 +31,12 @@ import {
   type RetryRequest,
 } from "@/components/chat/response-actions";
 import { useChatPreferences } from "@/components/chat/chat-preferences";
-import { aiModels, chatModes, type AiModelId } from "@/config/ai-models";
+import {
+  aiModels,
+  chatModes,
+  type AiModel,
+  type AiModelId,
+} from "@/config/ai-models";
 import type { ChatMode } from "@/config/ai-models";
 import { imageGenerationConfig, planLimits } from "@/config/billing";
 import { looksLikeImageGenerationPrompt } from "@/lib/image-generation-intent";
@@ -87,6 +95,14 @@ const quickPrompts = [
   "Turn this into a checklist",
   "Give me the technical plan",
 ];
+
+const modelIcons = {
+  "gpt-4o-mini": Zap,
+  "gpt-5.4-mini": Cpu,
+  "gpt-5.4": Brain,
+  "gpt-5.2-codex": Code2,
+  "gpt-5.5": Sparkles,
+} as const satisfies Record<AiModelId, typeof Zap>;
 
 const readableTextExtensions = new Set([
   "txt",
@@ -1024,7 +1040,7 @@ function ChatPanelContent({
           ) : null}
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div ref={composerMenuRef} className="relative">
                 <button
                   type="button"
@@ -1087,26 +1103,12 @@ function ChatPanelContent({
                 ) : null}
               </div>
 
-              <div className="relative w-fit shrink-0">
-                <select
-                  value={safeSelectedModel}
-                  onChange={(event) =>
-                    setSelectedModel(event.target.value as AiModelId)
-                  }
-                  disabled={streaming}
-                  aria-label="Choose assistant model"
-                  className="h-8 appearance-none rounded-xl border border-white/10 bg-white/[0.06] pl-3 pr-8 text-[11px] font-black text-white outline-none transition hover:bg-white/[0.09] disabled:cursor-not-allowed disabled:opacity-60 sm:h-11 sm:rounded-2xl sm:pl-3.5 sm:pr-9 sm:text-xs"
-                >
-                  {availableModels.map((model) => (
-                    <option key={model.id} value={model.id} className="bg-[#242424]">
-                      {model.name}
-                    </option>
-                  ))}
-                </select>
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 sm:text-xs">
-                  v
-                </span>
-              </div>
+              <ComposerModelPicker
+                value={safeSelectedModel}
+                models={availableModels}
+                disabled={streaming}
+                onChange={setSelectedModel}
+              />
 
               {composerMode !== "DEFAULT" ? (
                 <button
@@ -1485,6 +1487,146 @@ function ComposerMenuButton({
         </span>
       ) : null}
     </button>
+  );
+}
+
+function ComposerModelPicker({
+  value,
+  models,
+  disabled = false,
+  onChange,
+}: {
+  value: AiModelId;
+  models: readonly AiModel[];
+  disabled?: boolean;
+  onChange: (value: AiModelId) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const selectedModel =
+    models.find((model) => model.id === value) ??
+    aiModels.find((model) => model.id === value) ??
+    models[0] ??
+    aiModels[0];
+  const SelectedIcon = modelIcons[selectedModel.id];
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: globalThis.PointerEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  function chooseModel(modelId: AiModelId) {
+    onChange(modelId);
+    setOpen(false);
+  }
+
+  return (
+    <div ref={menuRef} className="relative shrink-0">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Choose assistant model"
+        className={cn(
+          "inline-flex h-8 max-w-[8.5rem] items-center gap-2 rounded-full border border-white/10 bg-white/[0.07] pl-2.5 pr-2 text-xs font-black text-white shadow-inner shadow-white/5 outline-none transition hover:border-white/20 hover:bg-white/[0.1] focus-visible:ring-2 focus-visible:ring-cyan-300/60 disabled:cursor-not-allowed disabled:opacity-60 sm:h-11 sm:max-w-none sm:pl-3.5 sm:pr-2.5",
+          open && "border-cyan-300/30 bg-white/[0.12]"
+        )}
+      >
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-300/12 text-cyan-200 sm:h-6 sm:w-6">
+          <SelectedIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+        </span>
+        <span className="min-w-0 truncate">{selectedModel.name}</span>
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-slate-300">
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 transition-transform duration-200",
+              open && "rotate-180"
+            )}
+          />
+        </span>
+      </button>
+
+      {open ? (
+        <div
+          role="listbox"
+          aria-label="Assistant models"
+          className="absolute bottom-11 -left-12 z-50 w-72 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-[1.35rem] border border-white/10 bg-[#2f2f2f] p-1.5 shadow-2xl shadow-black/50 ring-1 ring-white/5 sm:bottom-14 sm:left-0"
+        >
+          <div className="px-3 pb-2 pt-2">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+              Assistant model
+            </p>
+          </div>
+
+          <div className="max-h-80 overflow-y-auto pr-1">
+            {models.map((model) => {
+              const active = model.id === value;
+              const Icon = modelIcons[model.id];
+
+              return (
+                <button
+                  key={model.id}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  onClick={() => chooseModel(model.id)}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-white/[0.08]",
+                    active && "bg-cyan-400/10"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/[0.06] text-slate-300",
+                      active && "bg-cyan-300/15 text-cyan-200"
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate text-sm font-black text-white">
+                        {model.name}
+                      </span>
+                      <span className="shrink-0 rounded-full bg-white/[0.07] px-2 py-0.5 text-[10px] font-black text-slate-300">
+                        {model.creditsPerMessage} cr
+                      </span>
+                    </span>
+                    <span className="mt-1 block truncate text-xs leading-5 text-slate-400">
+                      {model.description}
+                    </span>
+                  </span>
+                  {active ? (
+                    <Check className="h-4 w-4 shrink-0 text-cyan-200" />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

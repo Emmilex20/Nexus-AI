@@ -1,0 +1,62 @@
+{
+  "name": "nexus-ai-vscode",
+  "displayName": "Nexus AI",
+  "description": "Nexus AI coding assistant for VS Code workspaces.",
+  "version": "0.1.0",
+  "publisher": "nexus-ai",
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onCommand:nexus-ai.setApiUrl",
+    "onCommand:nexus-ai.setDeveloperToken",
+    "onCommand:nexus-ai.askSelection",
+    "onCommand:nexus-ai.explainFile"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "nexus-ai.setApiUrl",
+        "title": "Nexus AI: Set API URL"
+      },
+      {
+        "command": "nexus-ai.setDeveloperToken",
+        "title": "Nexus AI: Set Developer Token"
+      },
+      {
+        "command": "nexus-ai.askSelection",
+        "title": "Nexus AI: Ask About Selection"
+      },
+      {
+        "command": "nexus-ai.explainFile",
+        "title": "Nexus AI: Explain Current File"
+      }
+    ],
+    "configuration": {
+      "title": "Nexus AI",
+      "properties": {
+        "nexusAi.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "Base URL for your Nexus AI app."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "pnpm compile",
+    "package": "vsce package --allow-missing-repository --out nexus-ai-vscode.vsix",
+    "install:local": "pnpm package && code --install-extension nexus-ai-vscode.vsix --force"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.6.1",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "1.94.0",
+    "typescript": "^5.0.0"
+  }
+}

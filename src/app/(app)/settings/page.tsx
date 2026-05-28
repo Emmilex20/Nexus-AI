@@ -1,5 +1,6 @@
 import { Bell, CreditCard, Shield, User } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { DeveloperTokenPanel } from "@/components/settings/developer-token-panel";
 
 const settings = [
   {
@@ -30,7 +31,7 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="Settings"
         title="Manage your workspace."
-        description="This page prepares the settings experience before auth, billing and user preferences are connected."
+        description="Manage account settings, security, billing, notifications and developer access for Nexus AI."
       />
 
       <div className="grid gap-5 md:grid-cols-2">
@@ -54,6 +55,8 @@ export default function SettingsPage() {
           );
         })}
       </div>
+
+      <DeveloperTokenPanel />
     </div>
   );
 }

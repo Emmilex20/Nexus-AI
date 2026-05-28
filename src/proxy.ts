@@ -12,6 +12,7 @@ const isPublicRoute = createRouteMatcher([
   "/security",
   "/sign-in(.*)",
   "/sign-up(.*)",
+  "/api/extensions(.*)",
   "/api/payments/webhook",
   "/opengraph-image(.*)",
   "/twitter-image(.*)",

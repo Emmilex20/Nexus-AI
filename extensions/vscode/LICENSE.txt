@@ -1,0 +1,3 @@
+Copyright (c) Nexus AI. All rights reserved.
+
+This local development extension is provided for private project use only.

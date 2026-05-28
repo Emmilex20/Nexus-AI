@@ -83,6 +83,7 @@ model User {
   usageLogs     UsageLog[]
   payments      Payment[]
   billingEvents BillingEvent[]
+  developerTokens DeveloperToken[]
 
   @@index([clerkId])
   @@index([email])
@@ -208,4 +209,21 @@ model AdminAuditLog {
   @@index([adminUserId])
   @@index([targetUserId])
   @@index([action])
+}
+
+model DeveloperToken {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  tokenHash   String    @unique
+  tokenPrefix String
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([revokedAt])
 }

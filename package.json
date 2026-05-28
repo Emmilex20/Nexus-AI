@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "vscode:package": "pnpm --dir extensions/vscode install && pnpm --dir extensions/vscode package",
+    "vscode:install": "pnpm --dir extensions/vscode install && pnpm --dir extensions/vscode install:local",
     "postinstall": "prisma generate"
   },
   "dependencies": {

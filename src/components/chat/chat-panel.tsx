@@ -147,7 +147,11 @@ function extractTextFromStreamChunk(chunk: string) {
   return text;
 }
 
-export function ChatPanel({
+export function ChatPanel(props: ChatPanelProps) {
+  return <ChatPanelContent key={props.conversationId} {...props} />;
+}
+
+function ChatPanelContent({
   conversationId,
   conversationTitle,
   conversationMode,

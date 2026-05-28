@@ -2,7 +2,7 @@
   "name": "nexus-ai-vscode",
   "displayName": "Nexus AI",
   "description": "Nexus AI coding assistant for VS Code workspaces.",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "publisher": "nexus-ai",
   "license": "UNLICENSED",
   "engines": {
@@ -12,6 +12,7 @@
   "activationEvents": [
     "onStartupFinished",
     "onView:nexus-ai.assistant",
+    "onView:nexus-ai.explorerAssistant",
     "onView:nexus-ai.workspace",
     "onView:nexus-ai.explorerWorkspace",
     "onCommand:nexus-ai.connect",
@@ -97,6 +98,11 @@
       ],
       "explorer": [
         {
+          "id": "nexus-ai.explorerAssistant",
+          "name": "Nexus AI Assistant",
+          "type": "webview"
+        },
+        {
           "id": "nexus-ai.explorerWorkspace",
           "name": "Nexus AI Workspace"
         }
@@ -106,6 +112,10 @@
       {
         "view": "nexus-ai.workspace",
         "contents": "Nexus AI reads the open VS Code folder locally.\n[Refresh Workspace](command:nexus-ai.refreshWorkspace)\n[Ask About Workspace](command:nexus-ai.askWorkspace)"
+      },
+      {
+        "view": "nexus-ai.explorerAssistant",
+        "contents": "Chat with Nexus AI and apply proposed code edits from VS Code.\n[Connect Nexus AI](command:nexus-ai.connect)"
       },
       {
         "view": "nexus-ai.explorerWorkspace",

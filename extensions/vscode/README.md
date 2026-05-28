@@ -57,6 +57,12 @@ Run `Nexus AI: Test API Connection` to verify the URL.
 - `Nexus AI: Test API Connection`
 - `Nexus AI: Set Developer Token`
 
+## Coding assistant workflow
+
+Open Explorer, expand `Nexus AI Assistant`, and type what you want changed. Nexus
+AI will reply with a short explanation and proposed file changes. Review the
+preview, then click `Apply changes` to write them into the local workspace.
+
 ## Workspace Context
 
 The extension reads local workspace context in VS Code, shows a `Nexus AI

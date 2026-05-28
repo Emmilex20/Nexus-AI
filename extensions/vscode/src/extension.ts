@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 
 const TOKEN_SECRET_KEY = "nexusAi.developerToken";
 const LAST_WELCOME_VERSION_KEY = "nexusAi.lastWelcomeVersion";
-const EXTENSION_VERSION = "0.1.2";
+const EXTENSION_VERSION = "0.2.0";
 const DEFAULT_MODEL = "gpt-4.1-mini";
 const PRODUCTION_API_URL = "https://nexus-ai-jet-kappa.vercel.app";
 const LOCAL_API_URL = "http://localhost:3000";
@@ -11,6 +11,8 @@ const DEFAULT_WORKSPACE_MAX_FILES = 120;
 const DEFAULT_WORKSPACE_CONTEXT_CHARS = 32000;
 const MAX_TREE_FILES = 250;
 const MAX_FILE_CONTEXT_CHARS = 6000;
+const MAX_AGENT_FILE_CHARS = 60000;
+const MAX_AGENT_FILES = 12;
 const EXTENSION_URI_AUTHORITY = "nexus-ai.nexus-ai-vscode";
 const EXCLUDED_WORKSPACE_GLOB =
   "{**/node_modules/**,**/.git/**,**/.next/**,**/dist/**,**/build/**,**/coverage/**,**/.vercel/**,**/.turbo/**,**/out/**,**/.cache/**,**/*.lock,**/package-lock.json,**/pnpm-lock.yaml,**/yarn.lock,**/.env,**/.env.*,**/*.png,**/*.jpg,**/*.jpeg,**/*.gif,**/*.webp,**/*.ico,**/*.pdf,**/*.zip,**/*.gz,**/*.tgz,**/*.map}";
@@ -62,11 +64,45 @@ type NexusChatPayload = {
   model: typeof DEFAULT_MODEL;
 };
 
+type NexusFileSnapshot = {
+  path: string;
+  languageId?: string;
+  content: string;
+};
+
+type NexusAgentChange = {
+  path: string;
+  action: "create" | "update" | "delete";
+  description?: string;
+  content?: string;
+};
+
+type NexusAgentPayload = NexusChatPayload & {
+  files: NexusFileSnapshot[];
+};
+
+type NexusAgentResponse = NexusChatResponse & {
+  changes?: NexusAgentChange[];
+};
+
 type AskOptions = {
   prompt?: string;
   requireSelection?: boolean;
   wholeFile?: boolean;
   includeWorkspace?: boolean;
+};
+
+type AssistantMessage = {
+  role: "user" | "assistant" | "system";
+  content: string;
+  metadata?: string;
+  changes?: NexusAgentChange[];
+};
+
+type WebviewMessage = {
+  command: string;
+  prompt?: string;
+  path?: string;
 };
 
 type WorkspaceOverview = {
@@ -85,8 +121,12 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Left,
     100
   );
-  const assistantView = new NexusAssistantViewProvider(context);
   const workspaceProvider = new NexusWorkspaceTreeProvider();
+  const assistantView = new NexusAssistantViewProvider(
+    context,
+    output,
+    workspaceProvider
+  );
 
   statusBar.text = "$(sparkle) Nexus AI";
   statusBar.tooltip = "Show Nexus AI Workspace";
@@ -105,6 +145,15 @@ export function activate(context: vscode.ExtensionContext) {
     ),
     vscode.window.registerWebviewViewProvider(
       "nexus-ai.assistant",
+      assistantView,
+      {
+        webviewOptions: {
+          retainContextWhenHidden: true,
+        },
+      }
+    ),
+    vscode.window.registerWebviewViewProvider(
+      "nexus-ai.explorerAssistant",
       assistantView,
       {
         webviewOptions: {
@@ -137,15 +186,16 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.window.showInformationMessage("Nexus AI workspace refreshed.");
     }),
     vscode.commands.registerCommand("nexus-ai.askWorkspace", async () => {
-      await askFromEditor(context, output, {
-        includeWorkspace: true,
-        prompt: await vscode.window.showInputBox({
-          title: "Ask Nexus AI About This Workspace",
-          prompt: "What should Nexus AI do with this workspace?",
-          placeHolder: "Find the VS Code extension flow and explain why the workspace is not visible...",
-          ignoreFocusOut: true,
-        }),
+      const prompt = await vscode.window.showInputBox({
+        title: "Ask Nexus AI About This Workspace",
+        prompt: "What should Nexus AI do with this workspace?",
+        placeHolder: "Fix the build error and update the files safely...",
+        ignoreFocusOut: true,
       });
+
+      if (prompt) {
+        await assistantView.submitPrompt(prompt);
+      }
     }),
     vscode.commands.registerCommand("nexus-ai.connect", async () => {
       await connectNexus(context, assistantView);
@@ -183,19 +233,53 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() {}
 
 class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
-  private view?: vscode.WebviewView;
+  private readonly views = new Set<vscode.WebviewView>();
+  private readonly messages: AssistantMessage[] = [
+    {
+      role: "assistant",
+      content:
+        "Tell me what to build, fix, or update. I can inspect the workspace context, propose file changes, and apply them after you review.",
+    },
+  ];
+  private pendingChanges: NexusAgentChange[] = [];
+  private busy = false;
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly output: vscode.OutputChannel,
+    private readonly workspaceProvider: NexusWorkspaceTreeProvider
+  ) {}
 
   resolveWebviewView(webviewView: vscode.WebviewView) {
-    this.view = webviewView;
+    this.views.add(webviewView);
 
     webviewView.webview.options = {
       enableScripts: true,
     };
 
-    webviewView.webview.onDidReceiveMessage(async (message: { command: string }) => {
+    webviewView.onDidDispose(() => {
+      this.views.delete(webviewView);
+    });
+
+    webviewView.webview.onDidReceiveMessage(async (message: WebviewMessage) => {
       switch (message.command) {
+        case "submit":
+          await this.submitPrompt(message.prompt ?? "");
+          break;
+        case "applyChanges":
+          await this.applyPendingChanges();
+          break;
+        case "clearChanges":
+          this.pendingChanges = [];
+          this.messages.push({
+            role: "system",
+            content: "Pending changes cleared.",
+          });
+          await this.refresh();
+          break;
+        case "openFile":
+          await this.openWorkspaceFile(message.path);
+          break;
         case "connect":
           await vscode.commands.executeCommand("nexus-ai.connect");
           break;
@@ -230,11 +314,152 @@ class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
   }
 
   async refresh() {
-    if (!this.view) return;
-
     const connected = Boolean(await this.context.secrets.get(TOKEN_SECRET_KEY));
     const overview = await getWorkspaceOverview();
-    this.view.webview.html = getAssistantViewHtml(connected, overview);
+
+    for (const view of this.views) {
+      view.webview.html = getAssistantViewHtml({
+        connected,
+        overview,
+        messages: this.messages,
+        pendingChanges: this.pendingChanges,
+        busy: this.busy,
+      });
+    }
+  }
+
+  async submitPrompt(rawPrompt: string) {
+    const prompt = rawPrompt.trim();
+
+    if (!prompt || this.busy) {
+      return;
+    }
+
+    const token = await this.context.secrets.get(TOKEN_SECRET_KEY);
+
+    if (!token) {
+      this.messages.push({
+        role: "assistant",
+        content: "Connect Nexus AI first, then I can work on this workspace.",
+      });
+      await this.refresh();
+      const action = await vscode.window.showWarningMessage(
+        "Connect Nexus AI before asking the coding assistant to edit files.",
+        "Connect"
+      );
+
+      if (action === "Connect") {
+        await vscode.commands.executeCommand("nexus-ai.connect");
+      }
+
+      return;
+    }
+
+    this.messages.push({ role: "user", content: prompt });
+    this.busy = true;
+    this.pendingChanges = [];
+    await this.refresh();
+
+    try {
+      const editor = vscode.window.activeTextEditor;
+      const selectedText = editor?.document.getText(editor.selection) ?? "";
+      const hasSelection = selectedText.trim().length > 0;
+      const workspaceContext = getWorkspaceContextEnabled()
+        ? await buildWorkspaceContext(editor, this.output)
+        : undefined;
+      const files = await buildAgentFileSnapshots(editor, this.output);
+      const payload: NexusAgentPayload = {
+        prompt,
+        selectedText: hasSelection
+          ? trimContext(selectedText, MAX_CONTEXT_CHARS)
+          : undefined,
+        fileName: editor ? getActiveFileName(editor) : undefined,
+        languageId: editor?.document.languageId,
+        workspaceName: getWorkspaceName(),
+        workspaceContext,
+        files,
+        model: DEFAULT_MODEL,
+      };
+      const data = await requestNexusAgent(token, payload, this.output);
+
+      this.pendingChanges = data.changes ?? [];
+      this.messages.push({
+        role: "assistant",
+        content: data.answer ?? "Done.",
+        metadata: formatAgentMetadata(data),
+        changes: this.pendingChanges,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Nexus AI request failed";
+      this.output.appendLine(message);
+      this.messages.push({
+        role: "assistant",
+        content: `I could not complete that request: ${message}`,
+      });
+      vscode.window.showErrorMessage(message);
+    } finally {
+      this.busy = false;
+      await this.refresh();
+    }
+  }
+
+  private async applyPendingChanges() {
+    if (this.pendingChanges.length === 0) {
+      vscode.window.showInformationMessage("No Nexus AI changes to apply.");
+      return;
+    }
+
+    const action = await vscode.window.showWarningMessage(
+      `Apply ${this.pendingChanges.length} Nexus AI file change${this.pendingChanges.length === 1 ? "" : "s"}?`,
+      { modal: true },
+      "Apply"
+    );
+
+    if (action !== "Apply") {
+      return;
+    }
+
+    try {
+      const applied = await applyAgentChanges(this.pendingChanges);
+
+      this.messages.push({
+        role: "system",
+        content: `Applied ${applied} file change${applied === 1 ? "" : "s"}.`,
+      });
+      this.pendingChanges = [];
+      this.workspaceProvider.refresh();
+      await this.refresh();
+      vscode.window.showInformationMessage("Nexus AI changes applied.");
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Could not apply Nexus AI changes";
+
+      this.output.appendLine(message);
+      vscode.window.showErrorMessage(message);
+      this.messages.push({
+        role: "assistant",
+        content: `I could not apply the changes: ${message}`,
+      });
+      await this.refresh();
+    }
+  }
+
+  private async openWorkspaceFile(path: string | undefined) {
+    if (!path) return;
+
+    const uri = getWorkspaceUri(path);
+
+    if (!uri) {
+      vscode.window.showErrorMessage("Nexus AI could not open that workspace file.");
+      return;
+    }
+
+    try {
+      const document = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(document, vscode.ViewColumn.Active);
+    } catch {
+      vscode.window.showInformationMessage("That file does not exist yet.");
+    }
   }
 }
 
@@ -644,6 +869,44 @@ async function askNexus(
   }
 }
 
+async function requestNexusAgent(
+  token: string,
+  payload: NexusAgentPayload,
+  output: vscode.OutputChannel
+) {
+  const apiUrl = getApiUrl();
+  const endpoint = `${apiUrl}/api/extensions/vscode/agent`;
+
+  output.appendLine(`POST ${endpoint}`);
+
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = (await res.json()) as NexusAgentResponse;
+
+  if (!res.ok || !data.answer) {
+    throw new Error(data.error || "Nexus AI agent request failed");
+  }
+
+  return data;
+}
+
+function formatAgentMetadata(data: NexusAgentResponse) {
+  return [
+    data.creditsUsed ? `${data.creditsUsed} credits` : "",
+    data.tokensUsed ? `${data.tokensUsed} tokens` : "",
+    data.conversationId ? `Conversation: ${data.conversationId}` : "",
+  ]
+    .filter(Boolean)
+    .join(" - ");
+}
+
 function showAnswerPanel(
   answer: string,
   metadata: {
@@ -753,6 +1016,66 @@ async function buildWorkspaceContext(
   return trimContext(chunks.join("\n\n"), maxChars);
 }
 
+async function buildAgentFileSnapshots(
+  activeEditor: vscode.TextEditor | undefined,
+  output: vscode.OutputChannel
+) {
+  const folders = vscode.workspace.workspaceFolders ?? [];
+
+  if (folders.length === 0) {
+    return [];
+  }
+
+  const files = await vscode.workspace.findFiles(
+    "**/*",
+    EXCLUDED_WORKSPACE_GLOB,
+    getWorkspaceMaxFiles()
+  );
+  const selectedFiles = selectWorkspaceContextFiles(files, activeEditor);
+  const snapshots: NexusFileSnapshot[] = [];
+
+  for (const file of selectedFiles) {
+    const relativePath = getRelativePath(file);
+
+    if (
+      !relativePath ||
+      isUnsafeAgentPath(relativePath) ||
+      !isTextContextFile(relativePath)
+    ) {
+      continue;
+    }
+
+    try {
+      const stat = await vscode.workspace.fs.stat(file);
+
+      if (stat.size > MAX_AGENT_FILE_CHARS * 2) {
+        continue;
+      }
+
+      const bytes = await vscode.workspace.fs.readFile(file);
+      const content = Buffer.from(bytes).toString("utf8");
+
+      if (looksBinary(content)) {
+        continue;
+      }
+
+      snapshots.push({
+        path: relativePath,
+        languageId:
+          activeEditor?.document.uri.toString() === file.toString()
+            ? activeEditor.document.languageId
+            : getFenceLanguage(relativePath),
+        content: content.slice(0, MAX_AGENT_FILE_CHARS),
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      output.appendLine(`Skipping agent file snapshot ${relativePath}: ${message}`);
+    }
+  }
+
+  return snapshots.slice(0, MAX_AGENT_FILES);
+}
+
 function selectWorkspaceContextFiles(
   files: vscode.Uri[],
   activeEditor: vscode.TextEditor | undefined
@@ -776,10 +1099,24 @@ function selectWorkspaceContextFiles(
   return [...selected.values()].slice(0, 8);
 }
 
-function getAssistantViewHtml(connected: boolean, overview: WorkspaceOverview) {
+function getAssistantViewHtml({
+  connected,
+  overview,
+  messages,
+  pendingChanges,
+  busy,
+}: {
+  connected: boolean;
+  overview: WorkspaceOverview;
+  messages: AssistantMessage[];
+  pendingChanges: NexusAgentChange[];
+  busy: boolean;
+}) {
   const status = connected ? "Connected" : "Not connected";
-  const apiMode = isLocalApiUrl(overview.apiUrl) ? "Local development API" : "Production API";
+  const apiMode = isLocalApiUrl(overview.apiUrl) ? "Local API" : "Production API";
   const workspaceStatus = overview.hasWorkspace ? "Workspace ready" : "No folder open";
+  const renderedMessages = messages.map(renderAssistantMessage).join("");
+  const renderedChanges = renderPendingChanges(pendingChanges);
 
   return `<!doctype html>
 <html lang="en">
@@ -789,17 +1126,29 @@ function getAssistantViewHtml(connected: boolean, overview: WorkspaceOverview) {
     <style>
       body {
         margin: 0;
-        padding: 18px;
+        padding: 0;
         background: transparent;
         color: var(--vscode-foreground);
         font-family: var(--vscode-font-family);
+      }
+
+      .shell {
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+      }
+
+      .scroll {
+        flex: 1;
+        overflow: auto;
+        padding: 14px;
       }
 
       .logo {
         align-items: center;
         display: flex;
         gap: 12px;
-        margin-bottom: 18px;
+        margin-bottom: 12px;
       }
 
       .mark {
@@ -829,7 +1178,7 @@ function getAssistantViewHtml(connected: boolean, overview: WorkspaceOverview) {
       .status {
         border: 1px solid var(--vscode-panel-border);
         border-radius: 8px;
-        margin: 14px 0;
+        margin: 10px 0;
         padding: 12px;
       }
 
@@ -871,69 +1220,253 @@ function getAssistantViewHtml(connected: boolean, overview: WorkspaceOverview) {
         width: 100%;
       }
 
+      button.inline {
+        display: inline-flex;
+        margin: 8px 8px 0 0;
+        width: auto;
+      }
+
       button.secondary {
         background: var(--vscode-button-secondaryBackground);
         color: var(--vscode-button-secondaryForeground);
       }
 
+      button:disabled,
+      textarea:disabled {
+        cursor: not-allowed;
+        opacity: 0.62;
+      }
+
       code {
         background: var(--vscode-textCodeBlock-background);
         border-radius: 6px;
-        display: block;
+        display: inline-block;
         margin-top: 8px;
         overflow-wrap: anywhere;
         padding: 8px;
       }
+
+      .messages {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .message {
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 8px;
+        padding: 10px;
+      }
+
+      .message.user {
+        background: var(--vscode-input-background);
+      }
+
+      .message.assistant {
+        background: color-mix(in srgb, var(--vscode-editor-background) 82%, var(--vscode-button-background));
+      }
+
+      .message.system {
+        opacity: 0.84;
+      }
+
+      .role {
+        color: var(--vscode-descriptionForeground);
+        font-size: 11px;
+        font-weight: 800;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+      }
+
+      .content {
+        line-height: 1.55;
+        white-space: pre-wrap;
+      }
+
+      .metadata {
+        color: var(--vscode-descriptionForeground);
+        font-size: 11px;
+        margin-top: 8px;
+      }
+
+      .change {
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 8px;
+        margin-top: 8px;
+        padding: 10px;
+      }
+
+      .change-head {
+        align-items: center;
+        display: flex;
+        gap: 8px;
+        justify-content: space-between;
+      }
+
+      .change-path {
+        font-family: var(--vscode-editor-font-family);
+        overflow-wrap: anywhere;
+      }
+
+      .change-action {
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 800;
+        padding: 3px 7px;
+        text-transform: uppercase;
+      }
+
+      .change-action.create {
+        background: rgba(34, 197, 94, 0.18);
+        color: #86efac;
+      }
+
+      .change-action.update {
+        background: rgba(14, 165, 233, 0.18);
+        color: #7dd3fc;
+      }
+
+      .change-action.delete {
+        background: rgba(248, 113, 113, 0.18);
+        color: #fca5a5;
+      }
+
+      pre {
+        background: var(--vscode-textCodeBlock-background);
+        border-radius: 6px;
+        font-family: var(--vscode-editor-font-family);
+        font-size: 11px;
+        line-height: 1.45;
+        max-height: 220px;
+        overflow: auto;
+        padding: 8px;
+        white-space: pre-wrap;
+      }
+
+      .composer {
+        border-top: 1px solid var(--vscode-panel-border);
+        padding: 12px;
+      }
+
+      textarea {
+        background: var(--vscode-input-background);
+        border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+        border-radius: 8px;
+        color: var(--vscode-input-foreground);
+        display: block;
+        font-family: var(--vscode-font-family);
+        line-height: 1.45;
+        min-height: 88px;
+        padding: 10px;
+        resize: vertical;
+        width: 100%;
+      }
     </style>
   </head>
   <body>
-    <div class="logo">
-      <div class="mark">N</div>
-      <div>
-        <h1>Nexus AI</h1>
-        <p>Code assistant for this workspace.</p>
+    <div class="shell">
+      <div class="scroll">
+        <div class="logo">
+          <div class="mark">N</div>
+          <div>
+            <h1>Nexus AI</h1>
+            <p>Tell it what to change. Review, then apply.</p>
+          </div>
+        </div>
+
+        <div class="status">
+          <span class="pill ${connected ? "connected" : "disconnected"}">${status}</span>
+          <span class="pill neutral">${escapeHtml(workspaceStatus)}</span>
+          <p>${escapeHtml(apiMode)}: <code>${escapeHtml(overview.apiUrl)}</code></p>
+          <p>${escapeHtml(overview.workspaceName)} · ${escapeHtml(overview.fileCountLabel)} files · context ${overview.includeWorkspaceContext ? "on" : "off"}</p>
+          ${overview.activeFile ? `<p>Active file: ${escapeHtml(overview.activeFile)}</p>` : ""}
+        </div>
+
+        ${renderedChanges}
+
+        <div class="messages">
+          ${renderedMessages}
+        </div>
       </div>
+
+      <form class="composer" id="composer">
+        <textarea id="prompt" ${busy ? "disabled" : ""} placeholder="Ask Nexus AI to build, fix, refactor, update files, add tests..."></textarea>
+        <button id="send" type="submit" ${busy ? "disabled" : ""}>${busy ? "Working..." : "Send"}</button>
+        <button type="button" class="secondary" onclick="send('connect')">${connected ? "Reconnect" : "Connect"}</button>
+        <button type="button" class="secondary" onclick="send('refreshWorkspace')">Refresh workspace</button>
+      </form>
     </div>
-
-    <div class="status">
-      <span class="pill ${connected ? "connected" : "disconnected"}">${status}</span>
-      <p>${escapeHtml(apiMode)}</p>
-      <code>${escapeHtml(overview.apiUrl)}</code>
-    </div>
-
-    <div class="status">
-      <span class="pill neutral">${escapeHtml(workspaceStatus)}</span>
-      <p>${escapeHtml(overview.workspaceName)}</p>
-      ${
-        overview.rootPath
-          ? `<code>${escapeHtml(overview.rootPath)}</code>`
-          : "<p>Open a folder in VS Code so Nexus AI can read local workspace context.</p>"
-      }
-      <p>${escapeHtml(overview.fileCountLabel)} files available in the Nexus workspace tree.</p>
-      ${
-        overview.activeFile
-          ? `<p>Active file: ${escapeHtml(overview.activeFile)}</p>`
-          : ""
-      }
-      <p>Workspace context is ${overview.includeWorkspaceContext ? "enabled" : "disabled"}.</p>
-    </div>
-
-    <button onclick="send('ask')">Ask Nexus AI</button>
-    <button onclick="send('askWorkspace')">Ask about workspace</button>
-    <button onclick="send('explain')">Explain current file</button>
-    <button onclick="send('connect')" class="secondary">${connected ? "Reconnect Nexus AI" : "Connect Nexus AI"}</button>
-    <button onclick="send('refreshWorkspace')" class="secondary">Refresh workspace</button>
-    <button onclick="send('testApi')" class="secondary">Test API connection</button>
-    <button onclick="send('api')" class="secondary">Change API URL</button>
-
     <script>
       const vscode = acquireVsCodeApi();
       function send(command) {
         vscode.postMessage({ command });
       }
+      function openFile(path) {
+        vscode.postMessage({ command: 'openFile', path });
+      }
+      document.getElementById('composer').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const prompt = document.getElementById('prompt').value;
+        vscode.postMessage({ command: 'submit', prompt });
+        document.getElementById('prompt').value = '';
+      });
+      document.getElementById('prompt').addEventListener('keydown', (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+          event.preventDefault();
+          document.getElementById('composer').requestSubmit();
+        }
+      });
     </script>
   </body>
 </html>`;
+}
+
+function renderAssistantMessage(message: AssistantMessage) {
+  return `<div class="message ${message.role}">
+    <div class="role">${escapeHtml(message.role)}</div>
+    <div class="content">${escapeHtml(message.content)}</div>
+    ${message.metadata ? `<div class="metadata">${escapeHtml(message.metadata)}</div>` : ""}
+    ${message.changes && message.changes.length > 0 ? `<div class="metadata">${message.changes.length} proposed file change${message.changes.length === 1 ? "" : "s"} ready to review.</div>` : ""}
+  </div>`;
+}
+
+function renderPendingChanges(changes: NexusAgentChange[]) {
+  if (changes.length === 0) {
+    return "";
+  }
+
+  return `<div class="status">
+    <span class="pill neutral">${changes.length} pending change${changes.length === 1 ? "" : "s"}</span>
+    ${changes.map(renderPendingChange).join("")}
+    <button class="inline" onclick="send('applyChanges')">Apply changes</button>
+    <button class="inline secondary" onclick="send('clearChanges')">Clear</button>
+  </div>`;
+}
+
+function renderPendingChange(change: NexusAgentChange) {
+  const preview =
+    change.action === "delete"
+      ? ""
+      : `<pre>${escapeHtml(previewContent(change.content ?? ""))}</pre>`;
+
+  return `<div class="change">
+    <div class="change-head">
+      <div class="change-path">${escapeHtml(change.path)}</div>
+      <span class="change-action ${change.action}">${escapeHtml(change.action)}</span>
+    </div>
+    ${change.description ? `<p>${escapeHtml(change.description)}</p>` : ""}
+    ${preview}
+    <button class="inline secondary" onclick="openFile(${JSON.stringify(change.path)})">Open file</button>
+  </div>`;
+}
+
+function previewContent(content: string) {
+  if (content.length <= 4000) {
+    return content;
+  }
+
+  return `${content.slice(0, 4000)}\n\n[Preview truncated]`;
 }
 
 function getAnswerHtml(
@@ -1046,12 +1579,99 @@ async function showWorkspaceLocationOnUpdate(context: vscode.ExtensionContext) {
   }
 }
 
+async function applyAgentChanges(changes: NexusAgentChange[]) {
+  let applied = 0;
+
+  for (const change of changes) {
+    const uri = getWorkspaceUri(change.path);
+
+    if (!uri) {
+      throw new Error(`Unsafe or invalid path: ${change.path}`);
+    }
+
+    if (change.action === "delete") {
+      await vscode.workspace.fs.delete(uri, {
+        recursive: false,
+        useTrash: true,
+      });
+      applied += 1;
+      continue;
+    }
+
+    if (!change.content) {
+      throw new Error(`Missing content for ${change.action} ${change.path}`);
+    }
+
+    await ensureParentDirectory(uri);
+    await vscode.workspace.fs.writeFile(uri, Buffer.from(change.content, "utf8"));
+    applied += 1;
+  }
+
+  return applied;
+}
+
+async function ensureParentDirectory(uri: vscode.Uri) {
+  const parent = vscode.Uri.joinPath(uri, "..");
+  await vscode.workspace.fs.createDirectory(parent);
+}
+
 async function focusView(command: string) {
   try {
     await vscode.commands.executeCommand(command);
   } catch {
     // Older VS Code-compatible editors may not expose generated focus commands.
   }
+}
+
+function getWorkspaceUri(path: string) {
+  const normalized = normalizeWorkspacePath(path);
+  const root = vscode.workspace.workspaceFolders?.[0];
+
+  if (!normalized || !root) {
+    return null;
+  }
+
+  return vscode.Uri.joinPath(root.uri, ...normalized.split("/"));
+}
+
+function normalizeWorkspacePath(path: string) {
+  const normalized = path.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+
+  if (
+    !normalized ||
+    normalized.startsWith("/") ||
+    /^[a-zA-Z]:/.test(normalized) ||
+    normalized.split("/").some((part) => part === ".." || part === "")
+  ) {
+    return null;
+  }
+
+  if (isUnsafeAgentPath(normalized)) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function isUnsafeAgentPath(relativePath: string) {
+  const normalized = relativePath.replace(/\\/g, "/").toLowerCase();
+  const fileName = normalized.split("/").pop() ?? normalized;
+
+  return (
+    isSensitivePath(normalized) ||
+    normalized.includes("/dist/") ||
+    normalized.includes("/build/") ||
+    normalized.includes("/coverage/") ||
+    normalized.includes("/.next/") ||
+    normalized.includes("/node_modules/") ||
+    fileName.endsWith(".lock") ||
+    fileName === "package-lock.json" ||
+    fileName === "pnpm-lock.yaml" ||
+    fileName === "yarn.lock" ||
+    [".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf", ".zip"].includes(
+      getExtension(fileName)
+    )
+  );
 }
 
 function getApiUrl() {

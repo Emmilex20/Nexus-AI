@@ -52,11 +52,11 @@ export default function PricingPage() {
               </p>
               <p className="mt-1 text-sm text-slate-400">
                 {plan.imageMonthlyGenerations > 0
-                  ? `${plan.imageMonthlyGenerations.toLocaleString()} image generations/month`
+                  ? `${plan.imageMonthlyGenerations.toLocaleString()} GPT Image 2 generations/month`
                   : "No image generation"}
               </p>
               <p className="mt-1 text-xs font-semibold text-slate-500">
-                Images use {imageGenerationConfig.creditsPerImage} credits each
+                Image generations use {imageGenerationConfig.creditsPerImage} credits each
               </p>
 
               <ul className="mt-8 space-y-4 text-sm text-slate-300">

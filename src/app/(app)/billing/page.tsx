@@ -155,7 +155,7 @@ export default async function BillingPage() {
                 : "VS Code assistant starts on Pro."}
               {" "}
               {currentPlan.imageMonthlyGenerations > 0
-                ? `Image generation includes ${currentPlan.imageMonthlyGenerations.toLocaleString()} high-quality images/month at ${imageGenerationConfig.creditsPerImage} credits each.`
+                ? `Image generation cap: ${currentPlan.imageMonthlyGenerations.toLocaleString()} GPT Image 2 generations/month at ${imageGenerationConfig.creditsPerImage} credits each.`
                 : "OpenAI image generation starts on Pro."}
               {user?.planRenewsAt
                 ? ` Next renewal: ${formatDate(user.planRenewsAt)}.`
@@ -208,11 +208,11 @@ export default async function BillingPage() {
                 </p>
                 <p className="mt-1 text-sm font-bold text-fuchsia-200">
                   {plan.imageMonthlyGenerations > 0
-                    ? `${plan.imageMonthlyGenerations.toLocaleString()} image generations/month`
+                    ? `${plan.imageMonthlyGenerations.toLocaleString()} GPT Image 2 generations/month`
                     : "No image generation"}
                 </p>
                 <p className="mt-1 text-xs font-semibold text-slate-500">
-                  Images use {imageGenerationConfig.creditsPerImage} credits each
+                  Image generations use {imageGenerationConfig.creditsPerImage} credits each
                 </p>
 
                 <div className="mt-6 space-y-3">

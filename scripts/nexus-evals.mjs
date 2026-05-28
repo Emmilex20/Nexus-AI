@@ -172,6 +172,29 @@ check("quality prompts keep context and verification active", () => {
   );
 });
 
+check("subscription prices match stronger model access", () => {
+  const billingSource = readFileSync("src/config/billing.ts", "utf8");
+
+  assert(
+    billingSource.includes('monthlyPrice: "NGN 12,000"') &&
+      billingSource.includes("amountKobo: 1200000") &&
+      billingSource.includes("monthlyCredits: 4000"),
+    "Expected Pro plan to use the updated GPT-5 solo pricing"
+  );
+  assert(
+    billingSource.includes('monthlyPrice: "NGN 38,000"') &&
+      billingSource.includes("amountKobo: 3800000") &&
+      billingSource.includes("monthlyCredits: 18000"),
+    "Expected Builder plan to use the updated Codex pricing"
+  );
+  assert(
+    billingSource.includes('monthlyPrice: "NGN 120,000"') &&
+      billingSource.includes("amountKobo: 12000000") &&
+      billingSource.includes("monthlyCredits: 70000"),
+    "Expected Team plan to use the updated frontier pricing"
+  );
+});
+
 let failed = 0;
 
 for (const item of checks) {

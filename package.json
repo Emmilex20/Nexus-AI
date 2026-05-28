@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "eval:nexus": "node scripts/nexus-evals.mjs",
     "vscode:package": "pnpm --dir extensions/vscode install && pnpm --dir extensions/vscode package",
     "vscode:install": "pnpm --dir extensions/vscode install && pnpm --dir extensions/vscode install:local",
     "postinstall": "prisma generate"

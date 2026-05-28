@@ -85,6 +85,7 @@ model User {
   billingEvents   BillingEvent[]
   developerTokens DeveloperToken[]
   generatedImages GeneratedImage[]
+  memoryItems     MemoryItem[]
 
   @@index([clerkId])
   @@index([email])
@@ -101,6 +102,7 @@ model Project {
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   conversations Conversation[]
+  memoryItems   MemoryItem[]
 
   @@index([userId])
 }
@@ -120,6 +122,7 @@ model Conversation {
   project         Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
   messages        Message[]
   generatedImages GeneratedImage[]
+  memoryItems     MemoryItem[]
 
   @@index([userId])
   @@index([projectId])
@@ -165,6 +168,30 @@ model GeneratedImage {
 
   @@index([userId])
   @@index([conversationId])
+}
+
+model MemoryItem {
+  id             String   @id @default(cuid())
+  userId         String
+  projectId      String?
+  conversationId String?
+  type           String   @default("NOTE")
+  title          String
+  content        String   @db.Text
+  source         String   @default("chat")
+  relevance      Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([conversationId])
+  @@index([type])
+  @@index([updatedAt])
 }
 
 model UsageLog {

@@ -2,10 +2,17 @@ import { openai } from "@ai-sdk/openai";
 import { generateObject, type UserContent } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getAiModel } from "@/config/ai-models";
+import { selectRuntimeModel } from "@/config/ai-models";
+import {
+  buildAssistantQualityPrompt,
+  buildWorkspaceCapabilityPrompt,
+} from "@/config/assistant-quality";
+import { planLimits } from "@/config/billing";
 import { getUserFromDeveloperToken } from "@/lib/developer-tokens";
+import { saveMemoryFromMessage } from "@/lib/memory";
 import { getPlanModelAccessError, getVsCodeAccessStatus } from "@/lib/plan-access";
 import { prisma } from "@/lib/prisma";
+import { buildWorkspaceContext } from "@/lib/workspace-context";
 
 export const maxDuration = 60;
 
@@ -164,7 +171,14 @@ export async function POST(req: Request) {
     );
   }
 
-  const selectedModel = getAiModel(parsed.data.model);
+  const selectedModel = selectRuntimeModel({
+    requestedModelId: parsed.data.model,
+    allowedModelIds: planLimits[user.plan].allowedModelIds,
+    mode: "CODE",
+    composerMode: "THINKING",
+    hasAttachments: parsed.data.attachments.length > 0,
+    message: parsed.data.prompt,
+  });
   const modelAccessError = getPlanModelAccessError(user.plan, selectedModel.id);
 
   if (modelAccessError) {
@@ -204,6 +218,11 @@ export async function POST(req: Request) {
     .join("\n\n");
 
   const userMessage = [parsed.data.prompt, context].filter(Boolean).join("\n\n");
+  const workspaceContext = await buildWorkspaceContext({
+    userId: user.id,
+    query: userMessage,
+    workspaceName: parsed.data.workspaceName,
+  }).catch(() => "");
 
   const conversation = await prisma.conversation.create({
     data: {
@@ -219,6 +238,13 @@ export async function POST(req: Request) {
       },
     },
   });
+
+  await saveMemoryFromMessage({
+    userId: user.id,
+    conversationId: conversation.id,
+    message: parsed.data.prompt,
+    source: "vscode",
+  }).catch(() => null);
 
   try {
     const result = await generateObject({
@@ -241,6 +267,12 @@ Rules for changes:
 - Keep changes focused and production-aware.
 - Prefer small, reviewable edits.
 - If no code change is needed, return an empty changes array.
+${buildWorkspaceCapabilityPrompt()}
+${buildAssistantQualityPrompt({
+  mode: "CODE",
+  composerMode: "THINKING",
+})}
+${workspaceContext ? `Retrieved workspace context:\n${workspaceContext}` : ""}
 `,
       messages: [
         {

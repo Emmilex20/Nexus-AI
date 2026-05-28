@@ -1,6 +1,12 @@
 export type AiModelId = "gpt-4o-mini" | "gpt-4.1-mini";
 
 export type ChatMode = "CHAT" | "SEARCH" | "CODE" | "FILE";
+export type ComposerMode =
+  | "DEFAULT"
+  | "THINKING"
+  | "DEEP_RESEARCH"
+  | "WEB_SEARCH"
+  | "IMAGE";
 
 export const aiModels = [
   {
@@ -8,12 +14,14 @@ export const aiModels = [
     name: "Fast",
     description: "Best for everyday chat, planning and simple tasks.",
     creditsPerMessage: 1,
+    strengths: ["chat", "drafting", "quick answers"],
   },
   {
     id: "gpt-4.1-mini",
     name: "Builder",
     description: "Better for coding, reasoning and longer technical answers.",
     creditsPerMessage: 2,
+    strengths: ["code", "vision", "retrieval", "longer reasoning"],
   },
 ] as const;
 
@@ -42,6 +50,67 @@ export const chatModes = [
 
 export function getAiModel(modelId?: string) {
   return aiModels.find((model) => model.id === modelId) ?? aiModels[0];
+}
+
+function isComplexRequest({
+  mode,
+  composerMode,
+  hasAttachments,
+  message,
+}: {
+  mode: ChatMode;
+  composerMode: ComposerMode;
+  hasAttachments: boolean;
+  message: string;
+}) {
+  const normalized = message.toLowerCase();
+
+  return (
+    mode === "CODE" ||
+    mode === "FILE" ||
+    composerMode === "THINKING" ||
+    composerMode === "DEEP_RESEARCH" ||
+    composerMode === "WEB_SEARCH" ||
+    hasAttachments ||
+    message.length > 900 ||
+    /\b(debug|fix|refactor|implement|architecture|schema|migration|api route|typescript|prisma|vercel|production|security|accuracy|analyze)\b/.test(
+      normalized
+    )
+  );
+}
+
+export function selectRuntimeModel({
+  requestedModelId,
+  allowedModelIds,
+  mode,
+  composerMode,
+  hasAttachments,
+  message,
+}: {
+  requestedModelId?: string;
+  allowedModelIds: readonly AiModelId[];
+  mode: ChatMode;
+  composerMode: ComposerMode;
+  hasAttachments: boolean;
+  message: string;
+}) {
+  const requestedModel = getAiModel(requestedModelId);
+  const builderModelId: AiModelId = "gpt-4.1-mini";
+
+  if (
+    requestedModel.id === "gpt-4o-mini" &&
+    allowedModelIds.includes(builderModelId) &&
+    isComplexRequest({
+      mode,
+      composerMode,
+      hasAttachments,
+      message,
+    })
+  ) {
+    return getAiModel(builderModelId);
+  }
+
+  return requestedModel;
 }
 
 export function getModePrompt(mode: ChatMode) {

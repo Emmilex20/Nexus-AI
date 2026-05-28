@@ -1,17 +1,26 @@
 import { openai } from "@ai-sdk/openai";
 import { streamText, type ModelMessage, type UserContent } from "ai";
 import { NextResponse } from "next/server";
-import { getAiModel, getModePrompt } from "@/config/ai-models";
-import { imageGenerationConfig } from "@/config/billing";
+import {
+  getModePrompt,
+  selectRuntimeModel,
+} from "@/config/ai-models";
+import {
+  buildAssistantQualityPrompt,
+  buildWorkspaceCapabilityPrompt,
+} from "@/config/assistant-quality";
+import { imageGenerationConfig, planLimits } from "@/config/billing";
 import { requireActiveUser } from "@/lib/current-user";
 import {
   generateConversationImage,
   ImageGenerationError,
 } from "@/lib/image-generation-service";
 import { looksLikeImageGenerationPrompt } from "@/lib/image-generation-intent";
+import { saveMemoryFromMessage } from "@/lib/memory";
 import { getPlanModelAccessError } from "@/lib/plan-access";
 import { prisma } from "@/lib/prisma";
 import { chatRequestSchema } from "@/lib/validators/chat";
+import { buildWorkspaceContext } from "@/lib/workspace-context";
 
 export const maxDuration = 120;
 
@@ -104,24 +113,6 @@ export async function POST(req: Request) {
     }
   }
 
-  const selectedModel = getAiModel(model);
-  const modelAccessError = getPlanModelAccessError(user.plan, selectedModel.id);
-
-  if (modelAccessError) {
-    return NextResponse.json(modelAccessError, { status: 403 });
-  }
-
-  if (user.credits < selectedModel.creditsPerMessage) {
-    return NextResponse.json(
-      {
-        error: "Not enough credits",
-        requiredCredits: selectedModel.creditsPerMessage,
-        currentCredits: user.credits,
-      },
-      { status: 402 }
-    );
-  }
-
   const conversation = await prisma.conversation.findFirst({
     where: {
       id: conversationId,
@@ -142,6 +133,34 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: "Conversation not found" },
       { status: 404 }
+    );
+  }
+
+  const hasImageAttachments = attachments.some(
+    (attachment) => attachment.kind === "image" && attachment.dataUrl
+  );
+  const selectedModel = selectRuntimeModel({
+    requestedModelId: model,
+    allowedModelIds: planLimits[user.plan].allowedModelIds,
+    mode: conversation.mode,
+    composerMode,
+    hasAttachments: attachments.length > 0,
+    message,
+  });
+  const modelAccessError = getPlanModelAccessError(user.plan, selectedModel.id);
+
+  if (modelAccessError) {
+    return NextResponse.json(modelAccessError, { status: 403 });
+  }
+
+  if (user.credits < selectedModel.creditsPerMessage) {
+    return NextResponse.json(
+      {
+        error: "Not enough credits",
+        requiredCredits: selectedModel.creditsPerMessage,
+        currentCredits: user.credits,
+      },
+      { status: 402 }
     );
   }
 
@@ -168,6 +187,14 @@ export async function POST(req: Request) {
         updatedAt: new Date(),
       },
     });
+
+    await saveMemoryFromMessage({
+      userId: user.id,
+      projectId: conversation.projectId,
+      conversationId,
+      message,
+      source: "chat",
+    }).catch(() => null);
   }
 
   const retryTargetIndex = retryTargetMessageId
@@ -195,10 +222,6 @@ export async function POST(req: Request) {
         : retryMode === "CUSTOM" && retryInstruction
           ? `Regenerate the previous answer using this change request: ${retryInstruction}`
           : "Regenerate the previous answer with a fresh, improved response.";
-
-  const hasImageAttachments = attachments.some(
-    (attachment) => attachment.kind === "image" && attachment.dataUrl
-  );
 
   const finalUserContent = retry
     ? `${message}\n\n${retryDirective}`
@@ -268,6 +291,12 @@ export async function POST(req: Request) {
     content: msg.content,
   }));
 
+  const workspaceContext = await buildWorkspaceContext({
+    userId: user.id,
+    conversationId,
+    query: finalUserContent,
+  }).catch(() => "");
+
   const systemPrompt = `
 You are Nexus AI, a professional AI workspace assistant.
 
@@ -281,6 +310,12 @@ Global style:
 - Never pretend live web search or file upload is available unless the platform provides it.
 
 ${getModePrompt(conversation.mode)}
+${buildWorkspaceCapabilityPrompt()}
+${buildAssistantQualityPrompt({
+  mode: conversation.mode,
+  composerMode,
+})}
+${workspaceContext ? `Retrieved workspace context:\n${workspaceContext}` : ""}
 `;
 
   const result = streamText({

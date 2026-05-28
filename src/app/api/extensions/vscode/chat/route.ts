@@ -2,10 +2,17 @@ import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getAiModel } from "@/config/ai-models";
+import { selectRuntimeModel } from "@/config/ai-models";
+import {
+  buildAssistantQualityPrompt,
+  buildWorkspaceCapabilityPrompt,
+} from "@/config/assistant-quality";
+import { planLimits } from "@/config/billing";
 import { getUserFromDeveloperToken } from "@/lib/developer-tokens";
+import { saveMemoryFromMessage } from "@/lib/memory";
 import { getPlanModelAccessError, getVsCodeAccessStatus } from "@/lib/plan-access";
 import { prisma } from "@/lib/prisma";
+import { buildWorkspaceContext } from "@/lib/workspace-context";
 
 export const maxDuration = 60;
 
@@ -48,7 +55,14 @@ export async function POST(req: Request) {
     );
   }
 
-  const selectedModel = getAiModel(parsed.data.model);
+  const selectedModel = selectRuntimeModel({
+    requestedModelId: parsed.data.model,
+    allowedModelIds: planLimits[user.plan].allowedModelIds,
+    mode: "CODE",
+    composerMode: "THINKING",
+    hasAttachments: false,
+    message: parsed.data.prompt,
+  });
   const modelAccessError = getPlanModelAccessError(user.plan, selectedModel.id);
 
   if (modelAccessError) {
@@ -81,6 +95,11 @@ export async function POST(req: Request) {
     .join("\n\n");
 
   const userMessage = [parsed.data.prompt, context].filter(Boolean).join("\n\n");
+  const workspaceContext = await buildWorkspaceContext({
+    userId: user.id,
+    query: userMessage,
+    workspaceName: parsed.data.workspaceName,
+  }).catch(() => "");
 
   const conversation = await prisma.conversation.create({
     data: {
@@ -99,6 +118,13 @@ export async function POST(req: Request) {
     },
   });
 
+  await saveMemoryFromMessage({
+    userId: user.id,
+    conversationId: conversation.id,
+    message: parsed.data.prompt,
+    source: "vscode",
+  }).catch(() => null);
+
   const result = await generateText({
     model: openai(selectedModel.id),
     system: `
@@ -109,6 +135,12 @@ Be concise, practical, and production-aware.
 When changing code, explain the exact change and show complete snippets only when useful.
 Use the selected code, active file metadata, and workspace context supplied by the extension.
 Do not claim you can see files beyond the context provided by the extension.
+${buildWorkspaceCapabilityPrompt()}
+${buildAssistantQualityPrompt({
+  mode: "CODE",
+  composerMode: "THINKING",
+})}
+${workspaceContext ? `Retrieved workspace context:\n${workspaceContext}` : ""}
 `,
     prompt: userMessage,
   });

@@ -1,4 +1,5 @@
 import {
+  Brain,
   CreditCard,
   FolderKanban,
   History,
@@ -22,6 +23,11 @@ export const appNavItems = [
     label: "Media",
     href: "/media",
     icon: Image,
+  },
+  {
+    label: "Memory",
+    href: "/memory",
+    icon: Brain,
   },
   {
     label: "History",

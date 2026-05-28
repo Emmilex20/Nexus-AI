@@ -4,6 +4,7 @@ import { ChatPreferencesProvider } from "@/components/chat/chat-preferences";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { MobileAppHeader } from "@/components/dashboard/mobile-app-header";
 import { SuspendedNotice } from "@/components/dashboard/suspended-notice";
+import { webConversationWhere } from "@/lib/conversation-filters";
 import { getCurrentDbUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 
@@ -31,10 +32,10 @@ export default async function AppLayout({
 
   const recentConversations = user
     ? await prisma.conversation.findMany({
-        where: {
+        where: webConversationWhere({
           userId: user.id,
           archived: false,
-        },
+        }),
         orderBy: {
           updatedAt: "desc",
         },

@@ -114,7 +114,7 @@ export async function POST(req: Request) {
     data: {
       title: parsed.data.fileName
         ? `VS Code: ${parsed.data.fileName}`.slice(0, 60)
-        : parsed.data.prompt.slice(0, 60),
+        : `VS Code: ${parsed.data.prompt}`.slice(0, 60),
       mode: "CODE",
       userId: user.id,
       messages: {

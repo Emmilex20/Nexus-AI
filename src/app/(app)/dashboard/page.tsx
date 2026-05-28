@@ -12,10 +12,11 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import { getCurrentDbUser } from "@/lib/current-user";
-import { prisma } from "@/lib/prisma";
-import { formatDate } from "@/lib/format";
 import { CreateConversationButton } from "@/components/chat/create-conversation-button";
+import { webConversationWhere } from "@/lib/conversation-filters";
+import { getCurrentDbUser } from "@/lib/current-user";
+import { formatDate } from "@/lib/format";
+import { prisma } from "@/lib/prisma";
 
 const actions = [
   {
@@ -83,16 +84,16 @@ export default async function DashboardPage() {
             },
           }),
           prisma.conversation.count({
-            where: {
+            where: webConversationWhere({
               userId: user.id,
               archived: false,
-            },
+            }),
           }),
           prisma.conversation.findMany({
-            where: {
+            where: webConversationWhere({
               userId: user.id,
               archived: false,
-            },
+            }),
             orderBy: {
               updatedAt: "desc",
             },

@@ -3,7 +3,7 @@ import * as vscode from "vscode";
 const TOKEN_SECRET_KEY = "nexusAi.developerToken";
 const LAST_WELCOME_VERSION_KEY = "nexusAi.lastWelcomeVersion";
 const CONVERSATIONS_STATE_KEY = "nexusAi.conversations";
-const EXTENSION_VERSION = "0.3.2";
+const EXTENSION_VERSION = "0.3.3";
 const DEFAULT_MODEL = "gpt-5.4";
 const PRODUCTION_API_URL = "https://nexus-ai-jet-kappa.vercel.app";
 const LOCAL_API_URL = "http://localhost:3000";
@@ -1989,6 +1989,13 @@ function getAssistantViewHtml({
       const permissionMode = document.getElementById('permissionMode');
       const composerBox = document.getElementById('composerBox');
 
+      document.querySelectorAll('[data-conversation-id]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const conversationId = button.getAttribute('data-conversation-id');
+          vscode.postMessage({ command: 'openConversation', conversationId });
+        });
+      });
+
       function renderAttachments() {
         attachmentList.innerHTML = attachments.map((attachment, index) => (
           '<div class="attachment">' +
@@ -2117,7 +2124,7 @@ function renderConversationCard(
   const preview = getConversationPreview(conversation);
   const messageCount = conversation.messages.length;
 
-  return `<button class="conversation-card ${active ? "active" : ""}" type="button" onclick="openConversation(${JSON.stringify(conversation.id)})">
+  return `<button class="conversation-card ${active ? "active" : ""}" type="button" data-conversation-id="${escapeHtml(conversation.id)}">
     <div class="conversation-title">${escapeHtml(conversation.title)}</div>
     <div class="conversation-meta">${escapeHtml(formatConversationDate(conversation.updatedAt))} &middot; ${messageCount} message${messageCount === 1 ? "" : "s"} &middot; ${escapeHtml(conversation.workspaceName)}</div>
     ${preview ? `<div class="conversation-preview">${escapeHtml(preview)}</div>` : ""}

@@ -4,6 +4,7 @@ import type { Plan } from "@prisma/client";
 import { useEffect, useRef, useState } from "react";
 import type { ClipboardEvent, FormEvent, ReactNode } from "react";
 import {
+  ArrowDown,
   ArrowUp,
   Bot,
   Brain,
@@ -18,7 +19,6 @@ import {
   Plus,
   Search,
   Sparkles,
-  User,
   X,
 } from "lucide-react";
 import { MessageContent } from "@/components/chat/message-content";
@@ -208,6 +208,9 @@ function ChatPanelContent({
   const [sitesMenuOpen, setSitesMenuOpen] = useState(false);
   const [sitesModalOpen, setSitesModalOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<ImagePreview | null>(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const scrollViewportRef = useRef<HTMLDivElement | null>(null);
+  const shouldFollowStreamRef = useRef(true);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -241,7 +244,27 @@ function ChatPanelContent({
   }, [safeSelectedModel, selectedModel, setSelectedModel]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    shouldFollowStreamRef.current = true;
+    setShowScrollToBottom(false);
+
+    const frame = window.requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!shouldFollowStreamRef.current) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({
+        behavior: streaming ? "auto" : "smooth",
+        block: "end",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, [messages, streaming]);
 
   useEffect(() => {
@@ -284,6 +307,31 @@ function ChatPanelContent({
       document.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [sitesMenuOpen]);
+
+  function isNearConversationBottom() {
+    const scrollViewport = scrollViewportRef.current;
+
+    if (!scrollViewport) return true;
+
+    return (
+      scrollViewport.scrollHeight -
+        scrollViewport.scrollTop -
+        scrollViewport.clientHeight <
+      160
+    );
+  }
+
+  function handleChatScroll() {
+    const nearBottom = isNearConversationBottom();
+    shouldFollowStreamRef.current = nearBottom;
+    setShowScrollToBottom(!nearBottom && messages.length > 0);
+  }
+
+  function scrollToLatest(behavior: ScrollBehavior = "smooth") {
+    shouldFollowStreamRef.current = true;
+    setShowScrollToBottom(false);
+    bottomRef.current?.scrollIntoView({ behavior, block: "end" });
+  }
 
   async function refreshCredits() {
     const res = await fetch("/api/me");
@@ -509,6 +557,8 @@ function ChatPanelContent({
     setAttachmentError("");
     setAttachments([]);
     setComposerMode("DEFAULT");
+    shouldFollowStreamRef.current = true;
+    setShowScrollToBottom(false);
 
     const userMessage: UiMessage = {
       id: crypto.randomUUID(),
@@ -736,6 +786,9 @@ function ChatPanelContent({
 
     if (!previousUserMessage || assistantMessage?.role !== "assistant") return;
 
+    shouldFollowStreamRef.current = true;
+    setShowScrollToBottom(false);
+
     setMessages((current) =>
       current.map((message) =>
         message.id === assistantMessage.id
@@ -757,8 +810,8 @@ function ChatPanelContent({
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 top-14 z-30 flex min-w-0 flex-col overflow-hidden bg-slate-950 lg:static lg:z-auto lg:h-screen lg:flex-1">
-      <div className="border-b border-white/10 bg-slate-950/95 px-3 py-2 backdrop-blur sm:px-6">
+    <div className="fixed inset-x-0 bottom-0 top-14 z-30 flex min-w-0 flex-col overflow-hidden bg-[#050505] lg:relative lg:inset-auto lg:z-auto lg:h-screen lg:flex-1">
+      <div className="border-b border-white/10 bg-[#050505]/95 px-3 py-2 backdrop-blur sm:px-6">
         <div className="flex items-center gap-4">
           <div className="flex min-w-0 items-center gap-2.5">
             <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300 sm:flex">
@@ -790,7 +843,11 @@ function ChatPanelContent({
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-6 sm:py-6">
+      <div
+        ref={scrollViewportRef}
+        onScroll={handleChatScroll}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-6 sm:py-6"
+      >
         {messages.length === 0 ? (
           <div className="mx-auto flex min-h-full max-w-3xl items-center justify-center pb-20 text-center sm:pb-24">
             <div>
@@ -820,42 +877,23 @@ function ChatPanelContent({
             </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-4xl space-y-5 pb-24 pt-2 sm:space-y-8 sm:pb-28 sm:pt-4">
-            {messages.map((message, index) => (
-              <div
-                key={message.id}
-                className={
-                  message.role === "user"
-                    ? "flex justify-end"
-                    : "flex flex-col items-start"
-                }
-              >
-                <div
-                  className={
-                    message.role === "user"
-                      ? "max-w-[86%] rounded-[1.25rem] bg-white px-4 py-3 text-sm leading-7 text-slate-950 shadow-lg shadow-black/10 sm:max-w-[70%] sm:rounded-[1.35rem] sm:px-5 sm:py-4"
-                      : "max-w-[92%] rounded-[1.25rem] bg-[#262626] px-4 py-3 text-sm leading-7 text-slate-100 sm:max-w-[78%] sm:rounded-[1.35rem] sm:px-5 sm:py-4"
-                  }
-                >
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] opacity-70">
-                      {message.role === "user" ? (
-                        <User className="h-4 w-4" />
-                      ) : (
-                        <Sparkles className="h-4 w-4 text-cyan-300" />
-                      )}
-                      {message.role === "user" ? "You" : "Nexus AI"}
-                    </div>
-
-                    {message.role === "user" && message.content ? (
-                      <CopyButton text={message.content} />
-                    ) : null}
+          <div className="mx-auto max-w-3xl space-y-7 pb-28 pt-2 sm:space-y-10 sm:pb-32 sm:pt-5">
+            {messages.map((message, index) => {
+              if (message.role === "system") {
+                return (
+                  <div
+                    key={message.id}
+                    className="mx-auto max-w-2xl rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center text-sm leading-6 text-slate-400"
+                  >
+                    {message.content}
                   </div>
+                );
+              }
 
-                  {message.role === "assistant" ? (
-                    <MessageContent content={message.content || "Thinking..."} />
-                  ) : (
-                    <div>
+              if (message.role === "user") {
+                return (
+                  <div key={message.id} className="group flex justify-end">
+                    <div className="max-w-[88%] rounded-[1.35rem] bg-[#2f2f2f] px-4 py-3 text-[15px] leading-7 text-white shadow-lg shadow-black/10 sm:max-w-[72%] sm:px-5 sm:py-4">
                       {message.attachments?.length ? (
                         <AttachmentPreviewList
                           attachments={message.attachments}
@@ -865,19 +903,38 @@ function ChatPanelContent({
                       ) : null}
 
                       <div className="whitespace-pre-wrap">{message.content}</div>
+
+                      {message.content ? (
+                        <div className="mt-3 flex justify-end opacity-80 transition group-hover:opacity-100">
+                          <CopyButton text={message.content} />
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div key={message.id} className="group">
+                  {message.content ? (
+                    <MessageContent content={message.content} />
+                  ) : (
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-400">
+                      <Sparkles className="h-4 w-4 text-cyan-300" />
+                      Thinking...
                     </div>
                   )}
-                </div>
 
-                {message.role === "assistant" && message.content ? (
-                  <ResponseActions
-                    text={message.content}
-                    onRetry={(request) => retryFromMessage(index, request)}
-                    disabled={streaming || !hasCredits}
-                  />
-                ) : null}
-              </div>
-            ))}
+                  {message.content ? (
+                    <ResponseActions
+                      text={message.content}
+                      onRetry={(request) => retryFromMessage(index, request)}
+                      disabled={streaming || !hasCredits}
+                    />
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -899,9 +956,21 @@ function ChatPanelContent({
         <div ref={bottomRef} />
       </div>
 
+      {showScrollToBottom ? (
+        <button
+          type="button"
+          onClick={() => scrollToLatest()}
+          className="absolute bottom-28 left-1/2 z-40 flex h-11 w-11 -translate-x-1/2 items-center justify-center rounded-full bg-[#2f2f2f] text-white shadow-2xl shadow-black/40 ring-1 ring-white/10 transition hover:bg-[#3a3a3a] sm:bottom-32"
+          aria-label="Jump to latest message"
+          title="Jump to latest"
+        >
+          <ArrowDown className="h-5 w-5" />
+        </button>
+      ) : null}
+
       <form
         onSubmit={handleSubmit}
-        className="shrink-0 border-t border-white/10 bg-slate-950/95 px-2.5 pb-3 pt-2 backdrop-blur-xl sm:px-5 sm:pb-4"
+        className="shrink-0 border-t border-white/10 bg-[#050505]/95 px-2.5 pb-3 pt-2 backdrop-blur-xl sm:px-5 sm:pb-4"
       >
         <div className="mx-auto max-w-3xl rounded-[1.35rem] bg-[#242424] p-2 shadow-2xl shadow-black/30 ring-1 ring-white/10 sm:rounded-[1.5rem]">
           <input

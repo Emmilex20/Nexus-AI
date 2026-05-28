@@ -249,13 +249,7 @@ export function deactivate() {}
 
 class NexusAssistantViewProvider implements vscode.WebviewViewProvider {
   private readonly views = new Set<vscode.WebviewView>();
-  private readonly messages: AssistantMessage[] = [
-    {
-      role: "assistant",
-      content:
-        "Tell me what to build, fix, or update. I can inspect the workspace context, propose file changes, and apply them after you review.",
-    },
-  ];
+  private readonly messages: AssistantMessage[] = [];
   private pendingChanges: NexusAgentChange[] = [];
   private busy = false;
 

@@ -2,7 +2,7 @@
   "name": "nexus-ai-vscode",
   "displayName": "Nexus AI",
   "description": "Nexus AI coding assistant for VS Code workspaces.",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "publisher": "nexus-ai",
   "license": "UNLICENSED",
   "engines": {
@@ -10,8 +10,19 @@
   },
   "categories": ["Other"],
   "activationEvents": [
+    "onStartupFinished",
+    "onView:nexus-ai.assistant",
+    "onView:nexus-ai.workspace",
+    "onView:nexus-ai.explorerWorkspace",
+    "onCommand:nexus-ai.connect",
+    "onCommand:nexus-ai.openAssistant",
+    "onCommand:nexus-ai.showWorkspace",
+    "onCommand:nexus-ai.refreshWorkspace",
+    "onCommand:nexus-ai.askWorkspace",
     "onCommand:nexus-ai.setApiUrl",
+    "onCommand:nexus-ai.testApiConnection",
     "onCommand:nexus-ai.setDeveloperToken",
+    "onCommand:nexus-ai.ask",
     "onCommand:nexus-ai.askSelection",
     "onCommand:nexus-ai.explainFile"
   ],
@@ -19,12 +30,40 @@
   "contributes": {
     "commands": [
       {
+        "command": "nexus-ai.connect",
+        "title": "Nexus AI: Connect"
+      },
+      {
+        "command": "nexus-ai.openAssistant",
+        "title": "Nexus AI: Open Assistant"
+      },
+      {
+        "command": "nexus-ai.showWorkspace",
+        "title": "Nexus AI: Show Workspace"
+      },
+      {
+        "command": "nexus-ai.refreshWorkspace",
+        "title": "Nexus AI: Refresh Workspace"
+      },
+      {
+        "command": "nexus-ai.askWorkspace",
+        "title": "Nexus AI: Ask About Workspace"
+      },
+      {
         "command": "nexus-ai.setApiUrl",
         "title": "Nexus AI: Set API URL"
       },
       {
+        "command": "nexus-ai.testApiConnection",
+        "title": "Nexus AI: Test API Connection"
+      },
+      {
         "command": "nexus-ai.setDeveloperToken",
         "title": "Nexus AI: Set Developer Token"
+      },
+      {
+        "command": "nexus-ai.ask",
+        "title": "Nexus AI: Ask"
       },
       {
         "command": "nexus-ai.askSelection",
@@ -35,13 +74,118 @@
         "title": "Nexus AI: Explain Current File"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "nexus-ai",
+          "title": "Nexus AI",
+          "icon": "resources/nexus-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "nexus-ai": [
+        {
+          "id": "nexus-ai.assistant",
+          "name": "Assistant",
+          "type": "webview"
+        },
+        {
+          "id": "nexus-ai.workspace",
+          "name": "Workspace"
+        }
+      ],
+      "explorer": [
+        {
+          "id": "nexus-ai.explorerWorkspace",
+          "name": "Nexus AI Workspace"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "nexus-ai.workspace",
+        "contents": "Nexus AI reads the open VS Code folder locally.\n[Refresh Workspace](command:nexus-ai.refreshWorkspace)\n[Ask About Workspace](command:nexus-ai.askWorkspace)"
+      },
+      {
+        "view": "nexus-ai.explorerWorkspace",
+        "contents": "Nexus AI reads the open VS Code folder locally.\n[Refresh Workspace](command:nexus-ai.refreshWorkspace)\n[Ask About Workspace](command:nexus-ai.askWorkspace)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "nexus-ai.showWorkspace"
+        },
+        {
+          "command": "nexus-ai.openAssistant"
+        },
+        {
+          "command": "nexus-ai.refreshWorkspace"
+        },
+        {
+          "command": "nexus-ai.askWorkspace"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "nexus-ai.ask",
+          "group": "navigation@1"
+        },
+        {
+          "command": "nexus-ai.explainFile",
+          "group": "navigation@2"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "nexus-ai.connect",
+          "when": "view == nexus-ai.assistant",
+          "group": "navigation"
+        },
+        {
+          "command": "nexus-ai.refreshWorkspace",
+          "when": "view == nexus-ai.workspace || view == nexus-ai.explorerWorkspace || view == nexus-ai.assistant",
+          "group": "navigation"
+        },
+        {
+          "command": "nexus-ai.askWorkspace",
+          "when": "view == nexus-ai.workspace || view == nexus-ai.explorerWorkspace",
+          "group": "navigation"
+        },
+        {
+          "command": "nexus-ai.testApiConnection",
+          "when": "view == nexus-ai.assistant",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "Nexus AI",
       "properties": {
         "nexusAi.apiUrl": {
           "type": "string",
-          "default": "http://localhost:3000",
-          "description": "Base URL for your Nexus AI app."
+          "default": "https://nexus-ai-jet-kappa.vercel.app",
+          "description": "Base URL for your deployed Nexus AI app. Use http://localhost:3000 only while running local development."
+        },
+        "nexusAi.includeWorkspaceContext": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include a bounded workspace snapshot with Nexus AI code requests."
+        },
+        "nexusAi.workspaceMaxFiles": {
+          "type": "number",
+          "default": 120,
+          "minimum": 20,
+          "maximum": 500,
+          "description": "Maximum number of workspace files to list for context."
+        },
+        "nexusAi.workspaceContextMaxChars": {
+          "type": "number",
+          "default": 32000,
+          "minimum": 8000,
+          "maximum": 80000,
+          "description": "Maximum number of characters of workspace context sent with a request."
         }
       }
     }

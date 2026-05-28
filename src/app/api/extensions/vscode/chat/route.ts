@@ -11,6 +11,7 @@ export const maxDuration = 60;
 const vscodeChatSchema = z.object({
   prompt: z.string().min(1).max(4000),
   selectedText: z.string().max(20000).optional(),
+  workspaceContext: z.string().max(80000).optional(),
   fileName: z.string().max(260).optional(),
   languageId: z.string().max(80).optional(),
   workspaceName: z.string().max(120).optional(),
@@ -60,6 +61,9 @@ export async function POST(req: Request) {
     parsed.data.selectedText
       ? `Selected code:\n\`\`\`${parsed.data.languageId ?? ""}\n${parsed.data.selectedText}\n\`\`\``
       : "",
+    parsed.data.workspaceContext
+      ? `Workspace context supplied by the VS Code extension:\n${parsed.data.workspaceContext}`
+      : "",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -91,6 +95,7 @@ You are Nexus AI inside VS Code.
 Help with the user's current code workspace.
 Be concise, practical, and production-aware.
 When changing code, explain the exact change and show complete snippets only when useful.
+Use the selected code, active file metadata, and workspace context supplied by the extension.
 Do not claim you can see files beyond the context provided by the extension.
 `,
     prompt: userMessage,

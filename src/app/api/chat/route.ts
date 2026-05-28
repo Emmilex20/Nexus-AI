@@ -28,7 +28,15 @@ export async function POST(req: Request) {
     );
   }
 
-  const { conversationId, message, model } = parsed.data;
+  const {
+    conversationId,
+    message,
+    model,
+    retry,
+    retryInstruction,
+    retryMode,
+    retryTargetMessageId,
+  } = parsed.data;
   const selectedModel = getAiModel(model);
 
   if (user.credits < selectedModel.creditsPerMessage) {
@@ -65,30 +73,62 @@ export async function POST(req: Request) {
     );
   }
 
-  await prisma.message.create({
-    data: {
-      role: "USER",
-      content: message,
-      conversationId,
-      userId: user.id,
-    },
-  });
+  if (!retry) {
+    await prisma.message.create({
+      data: {
+        role: "USER",
+        content: message,
+        conversationId,
+        userId: user.id,
+      },
+    });
 
-  await prisma.conversation.update({
-    where: {
-      id: conversationId,
-    },
-    data: {
-      title:
-        conversation.title === "New conversation"
-          ? message.slice(0, 60)
-          : conversation.title,
-      mode: conversation.mode,
-      updatedAt: new Date(),
-    },
-  });
+    await prisma.conversation.update({
+      where: {
+        id: conversationId,
+      },
+      data: {
+        title:
+          conversation.title === "New conversation"
+            ? message.slice(0, 60)
+            : conversation.title,
+        mode: conversation.mode,
+        updatedAt: new Date(),
+      },
+    });
+  }
 
-  const history = conversation.messages.map((msg) => ({
+  const retryTargetIndex = retryTargetMessageId
+    ? conversation.messages.findIndex((msg) => msg.id === retryTargetMessageId)
+    : -1;
+  const retryUserIndex =
+    retry && retryTargetIndex >= 0
+      ? conversation.messages
+          .slice(0, retryTargetIndex)
+          .map((msg, index) => ({ msg, index }))
+          .reverse()
+          .find(({ msg }) => msg.role === "USER")?.index
+      : undefined;
+
+  const historyMessages =
+    retry && retryUserIndex !== undefined
+      ? conversation.messages.slice(0, retryUserIndex)
+      : conversation.messages;
+
+  const retryDirective =
+    retryMode === "THINK_LONGER"
+      ? "Regenerate the previous answer with deeper reasoning, stronger structure, and more useful detail."
+      : retryMode === "SEARCH"
+        ? "Regenerate the previous answer in research mode. Live web search is not connected yet, so do not claim fresh verification. Clearly state what would need current verification."
+        : retryMode === "CUSTOM" && retryInstruction
+          ? `Regenerate the previous answer using this change request: ${retryInstruction}`
+          : "Regenerate the previous answer with a fresh, improved response.";
+
+  const finalUserContent = retry
+    ? `${message}\n\n${retryDirective}`
+    : message;
+
+  const history = historyMessages.map((msg) => ({
     role:
       msg.role === "USER"
         ? ("user" as const)
@@ -119,7 +159,7 @@ ${getModePrompt(conversation.mode)}
       ...history,
       {
         role: "user",
-        content: message,
+        content: finalUserContent,
       },
     ],
     onFinish: async ({ text, totalUsage }) => {
@@ -127,16 +167,38 @@ ${getModePrompt(conversation.mode)}
       const tokenCredits = Math.max(1, Math.ceil(tokensUsed / 1000));
       const creditsUsed = Math.max(selectedModel.creditsPerMessage, tokenCredits);
 
-      await prisma.message.create({
-        data: {
-          role: "ASSISTANT",
-          content: text,
-          model: selectedModel.id,
-          tokensUsed,
-          conversationId,
-          userId: user.id,
-        },
-      });
+      let updatedRetryMessage = false;
+
+      if (retry && retryTargetMessageId) {
+        const updateResult = await prisma.message.updateMany({
+          where: {
+            id: retryTargetMessageId,
+            role: "ASSISTANT",
+            conversationId,
+            userId: user.id,
+          },
+          data: {
+            content: text,
+            model: selectedModel.id,
+            tokensUsed,
+          },
+        });
+
+        updatedRetryMessage = updateResult.count > 0;
+      }
+
+      if (!updatedRetryMessage) {
+        await prisma.message.create({
+          data: {
+            role: "ASSISTANT",
+            content: text,
+            model: selectedModel.id,
+            tokensUsed,
+            conversationId,
+            userId: user.id,
+          },
+        });
+      }
 
       await prisma.usageLog.create({
         data: {

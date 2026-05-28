@@ -12,7 +12,10 @@ import {
 } from "lucide-react";
 import { MessageContent } from "@/components/chat/message-content";
 import { CopyButton } from "@/components/chat/copy-button";
-import { ResponseActions } from "@/components/chat/response-actions";
+import {
+  ResponseActions,
+  type RetryRequest,
+} from "@/components/chat/response-actions";
 import { useChatPreferences } from "@/components/chat/chat-preferences";
 import { ModeBadge } from "@/components/chat/mode-badge";
 import { aiModels, type AiModelId } from "@/config/ai-models";
@@ -135,6 +138,107 @@ export function ChatPanel({
     }
   }
 
+  async function streamAssistantResponse({
+    message,
+    assistantMessageId,
+    retryRequest,
+    retryTargetMessageId,
+    previousAssistantContent,
+  }: {
+    message: string;
+    assistantMessageId: string;
+    retryRequest?: RetryRequest;
+    retryTargetMessageId?: string;
+    previousAssistantContent?: string;
+  }) {
+    setError("");
+    setStreaming(true);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          conversationId,
+          message,
+          model: selectedModel,
+          retry: Boolean(retryRequest),
+          retryMode: retryRequest?.mode,
+          retryInstruction: retryRequest?.instruction,
+          retryTargetMessageId,
+        }),
+      });
+
+      if (!response.ok || !response.body) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Failed to send message");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let pendingChunk = "";
+
+      function appendAssistantText(textChunk: string) {
+        setMessages((current) =>
+          current.map((msg) =>
+            msg.id === assistantMessageId
+              ? {
+                  ...msg,
+                  content: `${msg.content}${textChunk}`,
+                }
+              : msg
+          )
+        );
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        pendingChunk += decoder.decode(value, { stream: true });
+        const events = pendingChunk.split("\n\n");
+        pendingChunk = events.pop() ?? "";
+
+        const textChunk = extractTextFromStreamChunk(events.join("\n"));
+
+        if (textChunk) {
+          appendAssistantText(textChunk);
+        }
+      }
+
+      const finalTextChunk = extractTextFromStreamChunk(pendingChunk);
+
+      if (finalTextChunk) {
+        appendAssistantText(finalTextChunk);
+      }
+
+      await refreshCredits();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+
+      if (previousAssistantContent === undefined) {
+        setMessages((current) =>
+          current.filter((msg) => msg.id !== assistantMessageId)
+        );
+      } else {
+        setMessages((current) =>
+          current.map((msg) =>
+            msg.id === assistantMessageId
+              ? {
+                  ...msg,
+                  content: previousAssistantContent,
+                }
+              : msg
+          )
+        );
+      }
+    } finally {
+      setStreaming(false);
+    }
+  }
+
   async function handleSubmit(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
 
@@ -142,7 +246,6 @@ export function ChatPanel({
 
     if (!cleanInput || streaming || !hasCredits) return;
 
-    setError("");
     setInput("");
 
     const userMessage: UiMessage = {
@@ -158,84 +261,11 @@ export function ChatPanel({
     };
 
     setMessages((current) => [...current, userMessage, assistantMessage]);
-    setStreaming(true);
 
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          conversationId,
-          message: cleanInput,
-          model: selectedModel,
-        }),
-      });
-
-      if (!response.ok || !response.body) {
-        const data = await response.json().catch(() => null);
-        throw new Error(data?.error || "Failed to send message");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let assistantText = "";
-      let pendingChunk = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        pendingChunk += decoder.decode(value, { stream: true });
-        const events = pendingChunk.split("\n\n");
-        pendingChunk = events.pop() ?? "";
-
-        const textChunk = extractTextFromStreamChunk(events.join("\n"));
-
-        if (textChunk) {
-          assistantText += textChunk;
-
-          setMessages((current) =>
-            current.map((msg) =>
-              msg.id === assistantMessage.id
-                ? {
-                    ...msg,
-                    content: assistantText,
-                  }
-                : msg
-            )
-          );
-        }
-      }
-
-      const finalTextChunk = extractTextFromStreamChunk(pendingChunk);
-
-      if (finalTextChunk) {
-        assistantText += finalTextChunk;
-
-        setMessages((current) =>
-          current.map((msg) =>
-            msg.id === assistantMessage.id
-              ? {
-                  ...msg,
-                  content: assistantText,
-                }
-              : msg
-          )
-        );
-      }
-
-      await refreshCredits();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-
-      setMessages((current) =>
-        current.filter((msg) => msg.id !== assistantMessage.id)
-      );
-    } finally {
-      setStreaming(false);
-    }
+    await streamAssistantResponse({
+      message: cleanInput,
+      assistantMessageId: assistantMessage.id,
+    });
   }
 
   function applyPrompt(prompt: string) {
@@ -245,18 +275,35 @@ export function ChatPanel({
     }
   }
 
-  function retryFromMessage(messageIndex: number) {
-    if (streaming) return;
+  function retryFromMessage(messageIndex: number, retryRequest: RetryRequest) {
+    if (streaming || !hasCredits) return;
 
     const previousUserMessage = messages
       .slice(0, messageIndex)
       .reverse()
       .find((message) => message.role === "user");
+    const assistantMessage = messages[messageIndex];
 
-    if (!previousUserMessage) return;
+    if (!previousUserMessage || assistantMessage?.role !== "assistant") return;
 
-    setInput(previousUserMessage.content);
-    textareaRef.current?.focus();
+    setMessages((current) =>
+      current.map((message) =>
+        message.id === assistantMessage.id
+          ? {
+              ...message,
+              content: "",
+            }
+          : message
+      )
+    );
+
+    void streamAssistantResponse({
+      message: previousUserMessage.content,
+      assistantMessageId: assistantMessage.id,
+      retryRequest,
+      retryTargetMessageId: assistantMessage.id,
+      previousAssistantContent: assistantMessage.content,
+    });
   }
 
   return (
@@ -365,7 +412,8 @@ export function ChatPanel({
                 {message.role === "assistant" && message.content ? (
                   <ResponseActions
                     text={message.content}
-                    onRetry={() => retryFromMessage(index)}
+                    onRetry={(request) => retryFromMessage(index, request)}
+                    disabled={streaming || !hasCredits}
                   />
                 ) : null}
               </div>

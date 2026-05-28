@@ -18,7 +18,6 @@ import {
   Search,
   Sparkles,
   User,
-  Wallet,
   X,
 } from "lucide-react";
 import { MessageContent } from "@/components/chat/message-content";
@@ -28,8 +27,7 @@ import {
   type RetryRequest,
 } from "@/components/chat/response-actions";
 import { useChatPreferences } from "@/components/chat/chat-preferences";
-import { ModeBadge } from "@/components/chat/mode-badge";
-import { aiModels, type AiModelId } from "@/config/ai-models";
+import { aiModels, chatModes, type AiModelId } from "@/config/ai-models";
 import type { ChatMode } from "@/config/ai-models";
 import { cn } from "@/lib/utils";
 
@@ -189,6 +187,8 @@ function ChatPanelContent({
   const sitesMenuRef = useRef<HTMLDivElement | null>(null);
 
   const hasCredits = credits > 0;
+  const currentMode =
+    chatModes.find((mode) => mode.id === conversationMode) ?? chatModes[0];
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -610,25 +610,25 @@ function ChatPanelContent({
 
   return (
     <div className="fixed inset-x-0 bottom-0 top-14 z-30 flex min-w-0 flex-col overflow-hidden bg-slate-950 lg:static lg:z-auto lg:h-screen lg:flex-1">
-      <div className="border-b border-white/10 bg-slate-950/95 px-3 py-2.5 backdrop-blur sm:px-6 sm:py-3">
+      <div className="border-b border-white/10 bg-slate-950/95 px-3 py-2 backdrop-blur sm:px-6">
         <div className="flex items-center gap-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300 sm:h-9 sm:w-9">
-              <Bot className="h-4 w-4 sm:h-5 sm:w-5" />
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300 sm:flex">
+              <Bot className="h-4 w-4" />
             </div>
 
             <div className="min-w-0">
-              <h1 className="max-w-[11rem] truncate text-sm font-black tracking-tight text-white sm:max-w-none sm:text-lg">
+              <h1 className="max-w-[15rem] truncate text-sm font-black tracking-tight text-white sm:max-w-none sm:text-base">
                 {conversationTitle}
               </h1>
 
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <ModeBadge mode={conversationMode} />
-
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-bold text-slate-300">
-                  <Wallet className="h-3.5 w-3.5 text-emerald-300" />
-                  {credits.toLocaleString()} credits
+              <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[11px] font-bold text-slate-500">
+                <span className="inline-flex items-center gap-1.5 text-cyan-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" />
+                  {currentMode.name}
                 </span>
+                <span className="text-slate-700">/</span>
+                <span>{credits.toLocaleString()} credits</span>
               </div>
             </div>
           </div>

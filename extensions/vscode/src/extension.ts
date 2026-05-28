@@ -1674,7 +1674,7 @@ async function applyAgentChanges(changes: NexusAgentChange[]) {
       continue;
     }
 
-    if (!change.content) {
+    if (change.content === undefined) {
       throw new Error(`Missing content for ${change.action} ${change.path}`);
     }
 

@@ -20,6 +20,7 @@
     "ai": "^6.0.183",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dotenv": "^17.4.2",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
